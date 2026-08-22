@@ -299,6 +299,19 @@
   <!-- 設定タブ -->
   <section id="tab-settings">
     <div class="card">
+      <div class="card-title">データのバックアップ</div>
+      <p class="note" style="margin-bottom:12px;">
+        Safariの「履歴とWebサイトデータを消去」をすると、このアプリのデータも一緒に消えてしまいます。
+        月に1回程度、バックアップファイルを保存しておくと安心です。保存したファイルはiCloud Driveやファイルアプリに置いておいてください。
+      </p>
+      <div class="actions" style="justify-content:flex-start; gap:10px;">
+        <button class="btn btn-primary" id="exportBtn">📤 バックアップを保存</button>
+        <button class="btn btn-ghost" id="importBtn">📥 バックアップから復元</button>
+        <input type="file" id="importFileInput" accept="application/json,.json" style="display:none;" />
+      </div>
+      <p class="note" id="backupStatus" style="margin-top:10px;"></p>
+    </div>
+    <div class="card">
       <div class="card-title">手数料の設定</div>
       <p class="note" style="margin-bottom:12px;">くらしのマーケットの予約手数料は公式には「サービス料金の20%＋消費税（実質22%）」です。決済手数料（カード・後払い）や振込手数料は店舗管理システムの請求明細に表示される実際の数値に合わせて調整してください。</p>
       <div class="grid">
@@ -749,6 +762,66 @@ document.getElementById("submitBtn").addEventListener("click", ()=>{
   saveRecords();
   refreshCustomerList();
   resetForm();
+});
+
+/* ---------- バックアップ（エクスポート／インポート） ---------- */
+function exportData(){
+  const payload = {
+    app: "kurume-reception-app",
+    exportedAt: new Date().toISOString(),
+    records,
+    settings,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "kurume-backup-" + todayStr() + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  document.getElementById("backupStatus").textContent = "保存しました（"+ new Date().toLocaleString("ja-JP") +"）。ファイルアプリやiCloud Driveに保存してください。";
+  showToast("バックアップを保存しました");
+}
+
+function importDataFromFile(file){
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const payload = JSON.parse(e.target.result);
+      if(!payload || !Array.isArray(payload.records)){
+        throw new Error("invalid backup file");
+      }
+      const count = payload.records.length;
+      if(!confirm("現在のデータ（"+records.length+"件）を、このバックアップ（"+count+"件）で上書きします。よろしいですか？")){
+        return;
+      }
+      records = payload.records;
+      if(payload.settings) settings = Object.assign({}, DEFAULT_SETTINGS, payload.settings);
+      saveRecords();
+      saveSettingsToStorage();
+      refreshCustomerList();
+      renderList();
+      renderMonthly();
+      renderSettings();
+      document.getElementById("backupStatus").textContent = "復元しました（"+count+"件）。";
+      showToast("バックアップを復元しました");
+    } catch(err){
+      showToast("読み込みに失敗しました。正しいバックアップファイルか確認してください");
+    }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById("exportBtn").addEventListener("click", exportData);
+document.getElementById("importBtn").addEventListener("click", ()=>{
+  document.getElementById("importFileInput").click();
+});
+document.getElementById("importFileInput").addEventListener("change", (e)=>{
+  const file = e.target.files[0];
+  if(file) importDataFromFile(file);
+  e.target.value = "";
 });
 
 /* ---------- init ---------- */
