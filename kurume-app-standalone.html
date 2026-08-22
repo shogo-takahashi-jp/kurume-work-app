@@ -156,7 +156,10 @@
         </div>
         <div class="field">
           <label class="flabel">エリア・住所</label>
-          <input id="area" placeholder="東久留米市〇〇1-2-3" />
+          <div style="display:flex; gap:8px;">
+            <input id="area" placeholder="東久留米市〇〇1-2-3" style="flex:1;" />
+            <button type="button" class="btn btn-ghost" id="openMapBtn" style="white-space:nowrap;">📍地図</button>
+          </div>
         </div>
       </div>
       <div class="field">
@@ -170,7 +173,20 @@
         </div>
         <div class="field">
           <label class="flabel">作業日</label>
-          <input type="date" id="workDate" />
+          <div style="display:flex; gap:8px;">
+            <input type="date" id="workDate" style="flex:1;" />
+            <button type="button" class="btn btn-ghost" id="addCalendarBtn" style="white-space:nowrap;">📅予定</button>
+          </div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="field">
+          <label class="flabel">作業開始時間</label>
+          <input type="time" id="workStartTime" />
+        </div>
+        <div class="field">
+          <label class="flabel">作業終了時間</label>
+          <input type="time" id="workEndTime" />
         </div>
       </div>
     </div>
@@ -380,6 +396,60 @@ function computeFees(f){
 
 function monthKey(dateStr){ return dateStr ? dateStr.slice(0,7) : null; }
 
+function openMapForAddress(address){
+  if(!address || !address.trim()){ showToast("住所を入力してください"); return; }
+  const url = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(address);
+  window.open(url, "_blank");
+}
+
+function ymdCompact(dateStr){
+  // "2026-08-23" -> "20260823"
+  return (dateStr || "").replaceAll("-", "");
+}
+function nextDayCompact(dateStr){
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + 1);
+  return d.getFullYear()+String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+}
+
+function buildCalendarUrl({ title, dateStr, startTime, endTime, location, details }){
+  if(!dateStr){ return null; }
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title || "くるめ生活サポート 作業",
+    location: location || "",
+    details: details || "",
+  });
+  if(startTime && endTime){
+    // 時間指定あり: 2026-08-23 + 09:00 -> 20260823T090000
+    const startCompact = ymdCompact(dateStr) + "T" + startTime.replace(":", "") + "00";
+    const endCompact = ymdCompact(dateStr) + "T" + endTime.replace(":", "") + "00";
+    params.set("dates", startCompact + "/" + endCompact);
+    params.set("ctz", "Asia/Tokyo");
+  } else {
+    // 時間指定なし: 終日イベント
+    const start = ymdCompact(dateStr);
+    const end = nextDayCompact(dateStr);
+    params.set("dates", start + "/" + end);
+  }
+  return "https://calendar.google.com/calendar/render?" + params.toString();
+}
+
+function addToCalendarFromForm(){
+  const f = getFormValues();
+  if(!f.workDate){ showToast("作業日を入力してください"); return; }
+  const title = (f.customerName ? f.customerName + "様 " : "") + (f.requestContent || "作業");
+  const url = buildCalendarUrl({
+    title,
+    dateStr: f.workDate,
+    startTime: f.workStartTime,
+    endTime: f.workEndTime,
+    location: f.area,
+    details: (f.requestContent || "") + (f.phone ? "\n電話: " + f.phone : ""),
+  });
+  if(url) window.open(url, "_blank");
+}
+
 /* ---------- customer index ---------- */
 function customerIndex(){
   const map = {};
@@ -391,7 +461,7 @@ function customerIndex(){
 const F = {
   receiptId:"receiptId", inquiryDate:"inquiryDate", inquiryChannel:"inquiryChannel",
   customerName:"customerName", phone:"phone", area:"area", requestContent:"requestContent",
-  desiredDate:"desiredDate", workDate:"workDate", status:"status",
+  desiredDate:"desiredDate", workDate:"workDate", workStartTime:"workStartTime", workEndTime:"workEndTime", status:"status",
   quoteAmount:"quoteAmount", discountAmount:"discountAmount", otherExpense:"otherExpense",
   paymentMethod:"paymentMethod", workHours:"workHours",
   reviewRequested:"reviewRequested", reviewResult:"reviewResult",
@@ -422,6 +492,7 @@ function resetForm(){
   setFormValues({
     receiptId: makeReceiptId(inquiryDate), inquiryDate, inquiryChannel:"くらしのマーケット",
     customerName:"", phone:"", area:"", requestContent:"", desiredDate:"", workDate:"",
+    workStartTime:"", workEndTime:"",
     status:"受付", quoteAmount:"", discountAmount:"0", otherExpense:"0",
     paymentMethod:"kurashi_card", workHours:"", reviewRequested:false, reviewResult:"",
     photoPermission:"", repeatLikelihood:"中", note:"",
@@ -462,22 +533,28 @@ function renderList(){
   }
   const sorted = [...records].sort((a,b)=>(b.inquiryDate||"").localeCompare(a.inquiryDate||""));
   let html = '<div class="table-wrap"><table><thead><tr>'+
-    '<th>問合せ日</th><th>お客様名</th><th>電話番号</th><th>依頼内容</th><th>ステータス</th>'+
+    '<th>問合せ日</th><th>お客様名</th><th>電話番号</th><th>依頼内容</th><th>作業日時</th><th>ステータス</th>'+
     '<th>受注額</th><th>手数料</th><th>実入金</th><th>支払方法</th><th></th>'+
     '</tr></thead><tbody>';
   for(const r of sorted){
     const pillClass = (r.status==="入金済"||r.status==="作業完了") ? "pill-done" : "pill-pending";
+    const workDateTime = r.workDate
+      ? esc(r.workDate) + (r.workStartTime ? " " + esc(r.workStartTime) + (r.workEndTime ? "〜"+esc(r.workEndTime) : "") : "")
+      : "";
     html += '<tr>'+
       '<td>'+esc(r.inquiryDate)+'</td>'+
       '<td>'+esc(r.customerName)+'</td>'+
       '<td>'+esc(r.phone||"")+'</td>'+
       '<td style="max-width:220px;white-space:normal;">'+esc(r.requestContent||"")+'</td>'+
+      '<td>'+workDateTime+'</td>'+
       '<td><span class="pill '+pillClass+'">'+esc(r.status)+'</span></td>'+
       '<td>'+yen(r.orderAmount)+'</td>'+
       '<td>'+yen(r.totalFee)+'</td>'+
       '<td>'+yen(r.netIncome)+'</td>'+
       '<td>'+esc((PM[r.paymentMethod]||{}).label||r.paymentMethod)+'</td>'+
       '<td>'+
+        (r.area ? '<button class="linkbtn" data-map="'+r._localId+'">📍</button>' : '')+
+        (r.workDate ? '<button class="linkbtn" data-cal="'+r._localId+'">📅</button>' : '')+
         '<button class="linkbtn" data-edit="'+r._localId+'">編集</button>'+
         '<button class="linkbtn danger" data-del="'+r._localId+'">削除</button>'+
       '</td>'+
@@ -486,6 +563,28 @@ function renderList(){
   html += '</tbody></table></div>';
   wrap.innerHTML = html;
 
+  wrap.querySelectorAll("[data-map]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const rec = records.find(r=>r._localId===btn.dataset.map);
+      if(rec) openMapForAddress(rec.area);
+    });
+  });
+  wrap.querySelectorAll("[data-cal]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const rec = records.find(r=>r._localId===btn.dataset.cal);
+      if(!rec) return;
+      const title = (rec.customerName ? rec.customerName + "様 " : "") + (rec.requestContent || "作業");
+      const url = buildCalendarUrl({
+        title,
+        dateStr: rec.workDate,
+        startTime: rec.workStartTime,
+        endTime: rec.workEndTime,
+        location: rec.area,
+        details: (rec.requestContent || "") + (rec.phone ? "\n電話: " + rec.phone : ""),
+      });
+      if(url) window.open(url, "_blank");
+    });
+  });
   wrap.querySelectorAll("[data-edit]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const rec = records.find(r=>r._localId===btn.dataset.edit);
@@ -627,6 +726,11 @@ document.getElementById("workHours").addEventListener("input", (e)=>{
 });
 
 document.getElementById("resetBtn").addEventListener("click", resetForm);
+
+document.getElementById("openMapBtn").addEventListener("click", ()=>{
+  openMapForAddress(document.getElementById("area").value);
+});
+document.getElementById("addCalendarBtn").addEventListener("click", addToCalendarFromForm);
 
 document.getElementById("submitBtn").addEventListener("click", ()=>{
   const f = getFormValues();
