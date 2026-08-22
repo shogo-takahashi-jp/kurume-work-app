@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>くるめ生活サポート 受付管理</title>
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="くるめ受付管理">
+<style>
+  :root{
+    --bg:#F4F6F2; --surface:#FFFFFF; --ink:#1E2A25; --muted:#63736A;
+    --border:#DCE3D8; --primary:#2F5233; --primaryDark:#1F3A23;
+    --primarySoft:#E7EEE4; --accent:#A8763E; --accentSoft:#F1E6D6;
+    --danger:#B0413E; --dangerSoft:#F7E6E5;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+    background:var(--bg); color:var(--ink);
+    padding:12px; padding-bottom:40px;
+  }
+  .container{max-width:720px; margin:0 auto;}
+  .header{padding:4px 4px 14px 4px;}
+  .title{font-size:19px; font-weight:700;}
+  .subtitle{font-size:12px; color:var(--muted); margin-top:2px;}
+  .tabs{
+    display:flex; gap:4px; background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:4px; margin-bottom:14px; overflow-x:auto;
+  }
+  .tab{
+    flex:1; text-align:center; padding:9px 8px; border-radius:9px; font-size:13px;
+    font-weight:600; color:var(--muted); cursor:pointer; white-space:nowrap;
+    border:none; background:transparent;
+  }
+  .tab.active{background:var(--primary); color:#fff;}
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:16px; margin-bottom:14px;
+  }
+  .card-title{font-size:13px; font-weight:700; color:var(--primaryDark); margin-bottom:10px;}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  @media (max-width:520px){ .grid{grid-template-columns:1fr;} }
+  .row3{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  @media (max-width:520px){ .row3{grid-template-columns:1fr 1fr;} }
+  .field{display:flex; flex-direction:column; gap:4px; margin-bottom:10px;}
+  label.flabel{font-size:11.5px; color:var(--muted); font-weight:600;}
+  input, select, textarea{
+    border:1px solid var(--border); border-radius:8px; padding:9px 10px; font-size:14.5px;
+    background:#FCFDFB; color:var(--ink); width:100%; font-family:inherit;
+  }
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--primary); outline-offset:1px; border-color:var(--primary);}
+  textarea{resize:vertical; min-height:44px;}
+  .computed{
+    background:var(--primarySoft); border-radius:10px; padding:12px 14px;
+    display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; margin-top:4px;
+  }
+  @media (max-width:520px){ .computed{grid-template-columns:1fr;} }
+  .citem{display:flex; justify-content:space-between; font-size:13px;}
+  .citem .k{color:var(--muted);}
+  .citem .v{font-weight:700; font-variant-numeric:tabular-nums;}
+  .citem.net .v{color:var(--primaryDark); font-size:15px;}
+  .btn{border:none; border-radius:9px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer;}
+  .btn-primary{background:var(--primary); color:#fff;}
+  .btn-ghost{background:transparent; color:var(--muted); border:1px solid var(--border);}
+  .actions{display:flex; gap:8px; justify-content:flex-end; margin-top:4px; flex-wrap:wrap;}
+  .table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:12px;}
+  table{width:100%; border-collapse:collapse; font-size:12.5px; min-width:760px;}
+  th{background:var(--primarySoft); color:var(--primaryDark); text-align:left; padding:8px 10px; font-weight:700; white-space:nowrap;}
+  td{padding:8px 10px; border-top:1px solid var(--border); white-space:nowrap;}
+  tr:hover td{background:#FAFBF8;}
+  .pill{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700;}
+  .pill-done{background:var(--primarySoft); color:var(--primaryDark);}
+  .pill-pending{background:var(--accentSoft); color:var(--accent);}
+  .linkbtn{background:none; border:none; color:var(--primary); font-weight:700; cursor:pointer; font-size:12px; padding:4px 6px;}
+  .linkbtn.danger{color:var(--danger);}
+  .empty{text-align:center; color:var(--muted); font-size:13px; padding:30px 10px;}
+  .summary-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;}
+  @media (max-width:640px){ .summary-grid{grid-template-columns:1fr 1fr;} }
+  .summary-box{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:12px 14px;}
+  .summary-box .label{font-size:11px; color:var(--muted); font-weight:600; margin-bottom:4px;}
+  .summary-box .value{font-size:18px; font-weight:800; color:var(--primaryDark); font-variant-numeric:tabular-nums;}
+  .month-title{font-size:13px; font-weight:700; color:var(--primaryDark); margin-bottom:6px;}
+  .note{font-size:11.5px; color:var(--muted); line-height:1.6;}
+  .checkbox-row{display:flex; align-items:center; gap:8px;}
+  .toast{
+    position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+    background:var(--primaryDark); color:#fff; padding:9px 18px; border-radius:999px;
+    font-size:13px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,0.18); z-index:50;
+    opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .toast.show{opacity:1;}
+  section{display:none;}
+  section.active{display:block;}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="title">くるめ生活サポート 受付管理</div>
+    <div class="subtitle">問合せ〜手数料計算〜集計をまとめて管理（このスマホ内に保存）</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="input">入力</button>
+    <button class="tab" data-tab="list">一覧（<span id="countBadge">0</span>）</button>
+    <button class="tab" data-tab="monthly">月次集計</button>
+    <button class="tab" data-tab="settings">手数料設定</button>
+  </div>
+
+  <!-- 入力タブ -->
+  <section id="tab-input" class="active">
+    <div class="card">
+      <div class="card-title" id="editingLabel">基本情報</div>
+      <div class="grid">
+        <div class="field">
+          <label class="flabel">受付ID</label>
+          <input id="receiptId" disabled />
+        </div>
+        <div class="field">
+          <label class="flabel">問合せ日</label>
+          <input type="date" id="inquiryDate" />
+        </div>
+        <div class="field">
+          <label class="flabel">問合せ経路</label>
+          <select id="inquiryChannel">
+            <option>くらしのマーケット</option>
+            <option>ホームページ</option>
+            <option>LINE</option>
+            <option>チラシ</option>
+            <option>Instagram</option>
+            <option>紹介</option>
+            <option>その他</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="flabel">ステータス</label>
+          <select id="status">
+            <option>受付</option>
+            <option>見積提示</option>
+            <option>確定</option>
+            <option>作業完了</option>
+            <option>入金済</option>
+            <option>キャンセル</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="flabel">お客様名（入力すると住所・電話番号を自動補完）</label>
+          <input id="customerName" list="customerList" placeholder="例：山田太郎" />
+          <datalist id="customerList"></datalist>
+        </div>
+        <div class="field">
+          <label class="flabel">電話番号</label>
+          <input type="tel" id="phone" placeholder="090-1234-5678" />
+        </div>
+        <div class="field">
+          <label class="flabel">エリア・住所</label>
+          <input id="area" placeholder="東久留米市〇〇1-2-3" />
+        </div>
+      </div>
+      <div class="field">
+        <label class="flabel">依頼内容</label>
+        <textarea id="requestContent" placeholder="例：家具組み立て2点、ゴミ出し"></textarea>
+      </div>
+      <div class="grid">
+        <div class="field">
+          <label class="flabel">希望日</label>
+          <input type="date" id="desiredDate" />
+        </div>
+        <div class="field">
+          <label class="flabel">作業日</label>
+          <input type="date" id="workDate" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">金額・手数料</div>
+      <div class="row3">
+        <div class="field">
+          <label class="flabel">見積提示額（円）</label>
+          <input inputmode="numeric" id="quoteAmount" placeholder="15000" />
+        </div>
+        <div class="field">
+          <label class="flabel">値引き額（円）</label>
+          <input inputmode="numeric" id="discountAmount" value="0" />
+        </div>
+        <div class="field">
+          <label class="flabel">その他経費（円）</label>
+          <input inputmode="numeric" id="otherExpense" value="0" />
+        </div>
+      </div>
+      <div class="grid">
+        <div class="field">
+          <label class="flabel">支払方法</label>
+          <select id="paymentMethod">
+            <option value="cash">現金</option>
+            <option value="paypay">PayPay</option>
+            <option value="kurashi_card" selected>くらしのマーケット決済（カード）</option>
+            <option value="kurashi_ato">くらしのマーケット決済（後払い/ATO）</option>
+            <option value="kurashi_cash">くらしのマーケット決済現金</option>
+            <option value="bank">銀行振込</option>
+            <option value="other">その他</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="flabel">作業時間（h）</label>
+          <input inputmode="decimal" id="workHours" placeholder="2.5" />
+        </div>
+      </div>
+      <div class="computed">
+        <div class="citem"><span class="k">受注額</span><span class="v" id="c_order">¥0</span></div>
+        <div class="citem"><span class="k" id="c_baseLabel">基本手数料</span><span class="v" id="c_base">¥0</span></div>
+        <div class="citem"><span class="k">追加手数料（決済/振込）</span><span class="v" id="c_add">¥0</span></div>
+        <div class="citem"><span class="k">手数料合計</span><span class="v" id="c_total">¥0</span></div>
+        <div class="citem net"><span class="k">実入金見込み</span><span class="v" id="c_net">¥0</span></div>
+        <div class="citem"><span class="k">時給目安</span><span class="v" id="c_hourly">―</span></div>
+      </div>
+      <p class="note" style="margin-top:8px;">手数料率は概算です。正確な数値は「手数料設定」タブでいつでも調整できます。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">口コミ・メモ</div>
+      <div class="grid">
+        <div class="field">
+          <div class="checkbox-row">
+            <input type="checkbox" id="reviewRequested" style="width:auto;" />
+            <label class="flabel" for="reviewRequested">口コミ依頼済み</label>
+          </div>
+        </div>
+        <div class="field">
+          <label class="flabel">口コミ結果</label>
+          <select id="reviewResult">
+            <option value="">未確認</option>
+            <option value="投稿済">投稿済</option>
+            <option value="OK">OK（依頼不要）</option>
+            <option value="なし">なし</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="flabel">写真使用許可</label>
+          <select id="photoPermission">
+            <option value="">未確認</option>
+            <option value="OK">OK</option>
+            <option value="NG">NG</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="flabel">再依頼見込み</label>
+          <select id="repeatLikelihood">
+            <option>高</option>
+            <option selected>中</option>
+            <option>低</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label class="flabel">注意メモ</label>
+        <textarea id="note" placeholder="例：請求書が来たら暮らしのマーケットへ振込"></textarea>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" id="resetBtn" style="display:none;">新規入力に戻る</button>
+      <button class="btn btn-primary" id="submitBtn">登録する</button>
+    </div>
+  </section>
+
+  <!-- 一覧タブ -->
+  <section id="tab-list">
+    <div class="card">
+      <div class="card-title">受付一覧（新しい順）</div>
+      <div id="listWrap"></div>
+    </div>
+  </section>
+
+  <!-- 月次集計タブ -->
+  <section id="tab-monthly">
+    <div id="monthlyWrap"></div>
+  </section>
+
+  <!-- 設定タブ -->
+  <section id="tab-settings">
+    <div class="card">
+      <div class="card-title">手数料の設定</div>
+      <p class="note" style="margin-bottom:12px;">くらしのマーケットの予約手数料は公式には「サービス料金の20%＋消費税（実質22%）」です。決済手数料（カード・後払い）や振込手数料は店舗管理システムの請求明細に表示される実際の数値に合わせて調整してください。</p>
+      <div class="grid">
+        <div class="field">
+          <label class="flabel">基本手数料率（予約手数料・税込）%</label>
+          <input inputmode="decimal" id="s_baseFeeRate" />
+        </div>
+        <div class="field">
+          <label class="flabel">カード決済 追加手数料率 %</label>
+          <input inputmode="decimal" id="s_cardFeeRate" />
+        </div>
+        <div class="field">
+          <label class="flabel">後払い（ATO）追加手数料率 %</label>
+          <input inputmode="decimal" id="s_atoFeeRate" />
+        </div>
+        <div class="field">
+          <label class="flabel">後払い（ATO）固定手数料（円）</label>
+          <input inputmode="numeric" id="s_atoFixedFee" />
+        </div>
+        <div class="field">
+          <label class="flabel">振込手数料（円・固定）</label>
+          <input inputmode="numeric" id="s_transferFixedFee" />
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="saveSettingsBtn">設定を保存</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- 定数 ---------- */
+const PM = {
+  cash:{label:"現金", kind:"direct"},
+  paypay:{label:"PayPay", kind:"direct"},
+  kurashi_card:{label:"くらしのマーケット決済（カード）", kind:"kurashi_card"},
+  kurashi_ato:{label:"くらしのマーケット決済（後払い/ATO）", kind:"kurashi_ato"},
+  kurashi_cash:{label:"くらしのマーケット決済現金", kind:"kurashi_cash"},
+  bank:{label:"銀行振込", kind:"bank"},
+  other:{label:"その他", kind:"direct"},
+};
+const DEFAULT_SETTINGS = { baseFeeRate:0.22, cardFeeRate:0.04, atoFeeRate:0.045, atoFixedFee:500, transferFixedFee:275 };
+const LS_RECORDS = "kurume_receipts_v1";
+const LS_SETTINGS = "kurume_fee_settings_v1";
+
+/* ---------- state ---------- */
+let records = JSON.parse(localStorage.getItem(LS_RECORDS) || "[]");
+let settings = Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}"));
+let editingId = null;
+
+/* ---------- utils ---------- */
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function yen(n){ return "¥"+Math.round(Number(n)||0).toLocaleString("ja-JP"); }
+function pct(n){ return (Number(n)*100).toFixed(1).replace(/\.0$/,"")+"%"; }
+function makeReceiptId(inquiryDate){
+  const d = inquiryDate ? new Date(inquiryDate) : new Date();
+  const mmdd = String(d.getMonth()+1).padStart(2,"0")+String(d.getDate()).padStart(2,"0");
+  const seq = String(records.length+1).padStart(3,"0");
+  return mmdd+"-"+seq;
+}
+function saveRecords(){ localStorage.setItem(LS_RECORDS, JSON.stringify(records)); }
+function saveSettingsToStorage(){ localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); }
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 1600);
+}
+
+function computeFees(f){
+  const quote = Number(f.quoteAmount)||0;
+  const discount = Number(f.discountAmount)||0;
+  const orderAmount = Math.max(quote-discount,0);
+  const pm = PM[f.paymentMethod] || PM.cash;
+  let baseFeeRate=0, baseFee=0, additionalFee=0;
+  if(["kurashi_card","kurashi_ato","kurashi_cash"].includes(pm.kind)){
+    baseFeeRate = settings.baseFeeRate;
+    baseFee = Math.round(orderAmount*baseFeeRate);
+  }
+  if(pm.kind==="kurashi_card"){ additionalFee = Math.round(orderAmount*settings.cardFeeRate); }
+  else if(pm.kind==="kurashi_ato"){ additionalFee = Math.round(orderAmount*settings.atoFeeRate)+Number(settings.atoFixedFee||0); }
+  else if(pm.kind==="bank"){ additionalFee = Number(settings.transferFixedFee||0); }
+  const otherExpense = Number(f.otherExpense)||0;
+  const totalFee = baseFee+additionalFee;
+  const netIncome = orderAmount-totalFee-otherExpense;
+  const hours = Number(f.workHours)||0;
+  const hourlyRate = hours>0 ? Math.round(netIncome/hours) : 0;
+  return {orderAmount, baseFeeRate, baseFee, additionalFee, totalFee, netIncome, hourlyRate};
+}
+
+function monthKey(dateStr){ return dateStr ? dateStr.slice(0,7) : null; }
+
+/* ---------- customer index ---------- */
+function customerIndex(){
+  const map = {};
+  for(const r of records){ if(r.customerName) map[r.customerName] = {area:r.area||"", phone:r.phone||""}; }
+  return map;
+}
+
+/* ---------- form ---------- */
+const F = {
+  receiptId:"receiptId", inquiryDate:"inquiryDate", inquiryChannel:"inquiryChannel",
+  customerName:"customerName", phone:"phone", area:"area", requestContent:"requestContent",
+  desiredDate:"desiredDate", workDate:"workDate", status:"status",
+  quoteAmount:"quoteAmount", discountAmount:"discountAmount", otherExpense:"otherExpense",
+  paymentMethod:"paymentMethod", workHours:"workHours",
+  reviewRequested:"reviewRequested", reviewResult:"reviewResult",
+  photoPermission:"photoPermission", repeatLikelihood:"repeatLikelihood", note:"note",
+};
+
+function getFormValues(){
+  const v = {};
+  for(const k in F){
+    const el = document.getElementById(F[k]);
+    v[k] = el.type === "checkbox" ? el.checked : el.value;
+  }
+  return v;
+}
+function setFormValues(v){
+  for(const k in F){
+    const el = document.getElementById(F[k]);
+    if(el.type === "checkbox") el.checked = !!v[k];
+    else el.value = v[k] != null ? v[k] : "";
+  }
+}
+function resetForm(){
+  editingId = null;
+  document.getElementById("editingLabel").textContent = "基本情報";
+  document.getElementById("resetBtn").style.display = "none";
+  document.getElementById("submitBtn").textContent = "登録する";
+  const inquiryDate = todayStr();
+  setFormValues({
+    receiptId: makeReceiptId(inquiryDate), inquiryDate, inquiryChannel:"くらしのマーケット",
+    customerName:"", phone:"", area:"", requestContent:"", desiredDate:"", workDate:"",
+    status:"受付", quoteAmount:"", discountAmount:"0", otherExpense:"0",
+    paymentMethod:"kurashi_card", workHours:"", reviewRequested:false, reviewResult:"",
+    photoPermission:"", repeatLikelihood:"中", note:"",
+  });
+  updateComputed();
+}
+
+function updateComputed(){
+  const f = getFormValues();
+  const fees = computeFees(f);
+  document.getElementById("c_order").textContent = yen(fees.orderAmount);
+  document.getElementById("c_baseLabel").textContent = "基本手数料（"+pct(fees.baseFeeRate)+"）";
+  document.getElementById("c_base").textContent = yen(fees.baseFee);
+  document.getElementById("c_add").textContent = yen(fees.additionalFee);
+  document.getElementById("c_total").textContent = yen(fees.totalFee);
+  document.getElementById("c_net").textContent = yen(fees.netIncome);
+  document.getElementById("c_hourly").textContent = fees.hourlyRate ? yen(fees.hourlyRate)+"/h" : "―";
+  return fees;
+}
+
+function refreshCustomerList(){
+  const dl = document.getElementById("customerList");
+  dl.innerHTML = "";
+  Object.keys(customerIndex()).forEach(name=>{
+    const opt = document.createElement("option");
+    opt.value = name;
+    dl.appendChild(opt);
+  });
+}
+
+/* ---------- list ---------- */
+function renderList(){
+  document.getElementById("countBadge").textContent = records.length;
+  const wrap = document.getElementById("listWrap");
+  if(records.length===0){
+    wrap.innerHTML = '<div class="empty">まだ受付データがありません。「入力」タブから登録してください。</div>';
+    return;
+  }
+  const sorted = [...records].sort((a,b)=>(b.inquiryDate||"").localeCompare(a.inquiryDate||""));
+  let html = '<div class="table-wrap"><table><thead><tr>'+
+    '<th>問合せ日</th><th>お客様名</th><th>電話番号</th><th>依頼内容</th><th>ステータス</th>'+
+    '<th>受注額</th><th>手数料</th><th>実入金</th><th>支払方法</th><th></th>'+
+    '</tr></thead><tbody>';
+  for(const r of sorted){
+    const pillClass = (r.status==="入金済"||r.status==="作業完了") ? "pill-done" : "pill-pending";
+    html += '<tr>'+
+      '<td>'+esc(r.inquiryDate)+'</td>'+
+      '<td>'+esc(r.customerName)+'</td>'+
+      '<td>'+esc(r.phone||"")+'</td>'+
+      '<td style="max-width:220px;white-space:normal;">'+esc(r.requestContent||"")+'</td>'+
+      '<td><span class="pill '+pillClass+'">'+esc(r.status)+'</span></td>'+
+      '<td>'+yen(r.orderAmount)+'</td>'+
+      '<td>'+yen(r.totalFee)+'</td>'+
+      '<td>'+yen(r.netIncome)+'</td>'+
+      '<td>'+esc((PM[r.paymentMethod]||{}).label||r.paymentMethod)+'</td>'+
+      '<td>'+
+        '<button class="linkbtn" data-edit="'+r._localId+'">編集</button>'+
+        '<button class="linkbtn danger" data-del="'+r._localId+'">削除</button>'+
+      '</td>'+
+    '</tr>';
+  }
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll("[data-edit]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const rec = records.find(r=>r._localId===btn.dataset.edit);
+      if(rec) editRecord(rec);
+    });
+  });
+  wrap.querySelectorAll("[data-del]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      if(!confirm("この受付を削除しますか？")) return;
+      records = records.filter(r=>r._localId!==btn.dataset.del);
+      saveRecords();
+      renderList(); renderMonthly(); refreshCustomerList();
+      showToast("削除しました");
+    });
+  });
+}
+
+function esc(s){
+  return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function editRecord(rec){
+  editingId = rec._localId;
+  document.getElementById("editingLabel").textContent = "基本情報（編集中）";
+  document.getElementById("resetBtn").style.display = "inline-block";
+  document.getElementById("submitBtn").textContent = "更新する";
+  setFormValues(rec);
+  updateComputed();
+  switchTab("input");
+}
+
+/* ---------- monthly ---------- */
+function renderMonthly(){
+  const wrap = document.getElementById("monthlyWrap");
+  if(records.length===0){
+    wrap.innerHTML = '<div class="card"><div class="empty">集計するデータがまだありません。</div></div>';
+    return;
+  }
+  const totals = records.reduce((acc,r)=>{
+    acc.orderAmount += Number(r.orderAmount)||0;
+    acc.totalFee += Number(r.totalFee)||0;
+    acc.netIncome += Number(r.netIncome)||0;
+    acc.count += 1;
+    return acc;
+  }, {orderAmount:0, totalFee:0, netIncome:0, count:0});
+
+  let html = '<div class="summary-grid">'+
+    '<div class="summary-box"><div class="label">累計 受注額</div><div class="value">'+yen(totals.orderAmount)+'</div></div>'+
+    '<div class="summary-box"><div class="label">累計 手数料</div><div class="value">'+yen(totals.totalFee)+'</div></div>'+
+    '<div class="summary-box"><div class="label">累計 実入金</div><div class="value">'+yen(totals.netIncome)+'</div></div>'+
+    '<div class="summary-box"><div class="label">受付件数</div><div class="value">'+totals.count+'件</div></div>'+
+    '</div>';
+
+  const groups = {};
+  for(const r of records){
+    const key = monthKey(r.workDate) || monthKey(r.inquiryDate) || "未設定";
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  }
+  const monthKeys = Object.keys(groups).sort((a,b)=>b.localeCompare(a));
+  for(const key of monthKeys){
+    const list = groups[key];
+    const sum = list.reduce((acc,r)=>{
+      acc.orderAmount += Number(r.orderAmount)||0;
+      acc.totalFee += Number(r.totalFee)||0;
+      acc.netIncome += Number(r.netIncome)||0;
+      acc.hours += Number(r.workHours)||0;
+      return acc;
+    }, {orderAmount:0, totalFee:0, netIncome:0, hours:0});
+    const avgHourly = sum.hours>0 ? Math.round(sum.netIncome/sum.hours) : 0;
+    const label = key==="未設定" ? "作業日未設定" : key.replace("-","年")+"月";
+    html += '<div class="card">'+
+      '<div class="month-title">'+label+'（'+list.length+'件）</div>'+
+      '<div class="computed">'+
+        '<div class="citem"><span class="k">受注額合計</span><span class="v">'+yen(sum.orderAmount)+'</span></div>'+
+        '<div class="citem"><span class="k">手数料合計</span><span class="v">'+yen(sum.totalFee)+'</span></div>'+
+        '<div class="citem net"><span class="k">実入金合計</span><span class="v">'+yen(sum.netIncome)+'</span></div>'+
+        '<div class="citem"><span class="k">平均時給目安</span><span class="v">'+(avgHourly?yen(avgHourly)+"/h":"―")+'</span></div>'+
+      '</div>'+
+    '</div>';
+  }
+  wrap.innerHTML = html;
+}
+
+/* ---------- settings ---------- */
+function renderSettings(){
+  document.getElementById("s_baseFeeRate").value = Math.round(settings.baseFeeRate*1000)/10;
+  document.getElementById("s_cardFeeRate").value = Math.round(settings.cardFeeRate*1000)/10;
+  document.getElementById("s_atoFeeRate").value = Math.round(settings.atoFeeRate*1000)/10;
+  document.getElementById("s_atoFixedFee").value = settings.atoFixedFee;
+  document.getElementById("s_transferFixedFee").value = settings.transferFixedFee;
+}
+document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
+  settings = {
+    baseFeeRate: (Number(document.getElementById("s_baseFeeRate").value)||0)/100,
+    cardFeeRate: (Number(document.getElementById("s_cardFeeRate").value)||0)/100,
+    atoFeeRate: (Number(document.getElementById("s_atoFeeRate").value)||0)/100,
+    atoFixedFee: Number(document.getElementById("s_atoFixedFee").value)||0,
+    transferFixedFee: Number(document.getElementById("s_transferFixedFee").value)||0,
+  };
+  saveSettingsToStorage();
+  updateComputed();
+  showToast("手数料設定を保存しました");
+});
+
+/* ---------- tabs ---------- */
+function switchTab(name){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===name));
+  document.querySelectorAll("section").forEach(s=>s.classList.toggle("active", s.id==="tab-"+name));
+  if(name==="list") renderList();
+  if(name==="monthly") renderMonthly();
+  if(name==="settings") renderSettings();
+}
+document.querySelectorAll(".tab").forEach(t=>{
+  t.addEventListener("click", ()=>switchTab(t.dataset.tab));
+});
+
+/* ---------- events ---------- */
+document.getElementById("customerName").addEventListener("input", (e)=>{
+  const idx = customerIndex();
+  const match = idx[e.target.value];
+  if(match){
+    if(!document.getElementById("area").value) document.getElementById("area").value = match.area;
+    if(!document.getElementById("phone").value) document.getElementById("phone").value = match.phone;
+  }
+});
+
+["quoteAmount","discountAmount","otherExpense","paymentMethod","workHours"].forEach(id=>{
+  document.getElementById(id).addEventListener("input", updateComputed);
+  document.getElementById(id).addEventListener("change", updateComputed);
+});
+["quoteAmount","discountAmount","otherExpense"].forEach(id=>{
+  document.getElementById(id).addEventListener("input", (e)=>{
+    e.target.value = e.target.value.replace(/[^0-9]/g,"");
+  });
+});
+document.getElementById("workHours").addEventListener("input", (e)=>{
+  e.target.value = e.target.value.replace(/[^0-9.]/g,"");
+});
+
+document.getElementById("resetBtn").addEventListener("click", resetForm);
+
+document.getElementById("submitBtn").addEventListener("click", ()=>{
+  const f = getFormValues();
+  if(!f.customerName.trim()){ showToast("お客様名を入力してください"); return; }
+  if(!f.quoteAmount){ showToast("見積提示額を入力してください"); return; }
+  const fees = computeFees(f);
+  const record = Object.assign({}, f, fees, {_localId: editingId || ("r_"+Date.now())});
+
+  if(editingId){
+    records = records.map(r=>r._localId===editingId ? record : r);
+    showToast("更新しました");
+  } else {
+    records.push(record);
+    showToast("登録しました");
+  }
+  saveRecords();
+  refreshCustomerList();
+  resetForm();
+});
+
+/* ---------- init ---------- */
+resetForm();
+refreshCustomerList();
+renderList();
+</script>
+</body>
+</html>
