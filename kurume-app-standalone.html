@@ -70,6 +70,7 @@
   th{background:var(--primarySoft); color:var(--primaryDark); text-align:left; padding:8px 10px; font-weight:700; white-space:nowrap;}
   td{padding:8px 10px; border-top:1px solid var(--border); white-space:nowrap;}
   tr:hover td{background:#FAFBF8;}
+  .kr-row:active td{background:#EFF3EC;}
   .pill{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700;}
   .pill-done{background:var(--primarySoft); color:var(--primaryDark);}
   .pill-pending{background:var(--accentSoft); color:var(--accent);}
@@ -128,6 +129,8 @@
             <option>くらしのマーケット</option>
             <option>ホームページ</option>
             <option>LINE</option>
+            <option>Googleマップ／検索</option>
+            <option>直接依頼（リピート・電話等）</option>
             <option>チラシ</option>
             <option>Instagram</option>
             <option>紹介</option>
@@ -149,6 +152,7 @@
           <label class="flabel">お客様名（入力すると住所・電話番号を自動補完）</label>
           <input id="customerName" list="customerList" placeholder="例：山田太郎" />
           <datalist id="customerList"></datalist>
+          <p class="note" id="repeatHint" style="margin:2px 0 0; color:var(--accent); display:none;"></p>
         </div>
         <div class="field">
           <label class="flabel">電話番号</label>
@@ -510,6 +514,7 @@ function resetForm(){
     paymentMethod:"kurashi_card", workHours:"", reviewRequested:false, reviewResult:"",
     photoPermission:"", repeatLikelihood:"中", note:"",
   });
+  document.getElementById("repeatHint").style.display = "none";
   updateComputed();
 }
 
@@ -545,6 +550,10 @@ function renderList(){
     return;
   }
   const sorted = [...records].sort((a,b)=>(b.inquiryDate||"").localeCompare(a.inquiryDate||""));
+  const customerCounts = {};
+  for(const r of records){
+    if(r.customerName) customerCounts[r.customerName] = (customerCounts[r.customerName]||0) + 1;
+  }
   let html = '<div class="table-wrap"><table><thead><tr>'+
     '<th>問合せ日</th><th>お客様名</th><th>電話番号</th><th>依頼内容</th><th>作業日時</th><th>ステータス</th>'+
     '<th>受注額</th><th>手数料</th><th>実入金</th><th>支払方法</th><th></th>'+
@@ -554,9 +563,11 @@ function renderList(){
     const workDateTime = r.workDate
       ? esc(r.workDate) + (r.workStartTime ? " " + esc(r.workStartTime) + (r.workEndTime ? "〜"+esc(r.workEndTime) : "") : "")
       : "";
-    html += '<tr>'+
+    const count = customerCounts[r.customerName] || 1;
+    const repeatBadge = count > 1 ? ' <span class="pill" style="background:var(--accentSoft);color:var(--accent);">リピート('+count+')</span>' : '';
+    html += '<tr class="kr-row" data-row="'+r._localId+'" style="cursor:pointer;">'+
       '<td>'+esc(r.inquiryDate)+'</td>'+
-      '<td>'+esc(r.customerName)+'</td>'+
+      '<td>'+esc(r.customerName)+repeatBadge+'</td>'+
       '<td>'+esc(r.phone||"")+'</td>'+
       '<td style="max-width:220px;white-space:normal;">'+esc(r.requestContent||"")+'</td>'+
       '<td>'+workDateTime+'</td>'+
@@ -574,7 +585,17 @@ function renderList(){
     '</tr>';
   }
   html += '</tbody></table></div>';
+  html += '<p class="note" style="margin-top:8px;">行をタップすると編集できます。</p>';
   wrap.innerHTML = html;
+
+  // 行タップで編集（ボタン自体をタップした場合はそちらの処理を優先し、編集は開かない）
+  wrap.querySelectorAll(".kr-row").forEach(row=>{
+    row.addEventListener("click", (e)=>{
+      if(e.target.closest("button")) return;
+      const rec = records.find(r=>r._localId===row.dataset.row);
+      if(rec) editRecord(rec);
+    });
+  });
 
   wrap.querySelectorAll("[data-map]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
@@ -625,6 +646,14 @@ function editRecord(rec){
   document.getElementById("resetBtn").style.display = "inline-block";
   document.getElementById("submitBtn").textContent = "更新する";
   setFormValues(rec);
+  const hint = document.getElementById("repeatHint");
+  const pastCount = rec.customerName ? records.filter(r=>r.customerName===rec.customerName && r._localId!==rec._localId).length : 0;
+  if(pastCount > 0){
+    hint.textContent = "🔁 過去に "+pastCount+" 回のご依頼があります（リピート様）";
+    hint.style.display = "block";
+  } else {
+    hint.style.display = "none";
+  }
   updateComputed();
   switchTab("input");
 }
@@ -722,6 +751,15 @@ document.getElementById("customerName").addEventListener("input", (e)=>{
   if(match){
     if(!document.getElementById("area").value) document.getElementById("area").value = match.area;
     if(!document.getElementById("phone").value) document.getElementById("phone").value = match.phone;
+  }
+  const hint = document.getElementById("repeatHint");
+  const name = e.target.value.trim();
+  const pastCount = name ? records.filter(r=>r.customerName===name && r._localId!==editingId).length : 0;
+  if(pastCount > 0){
+    hint.textContent = "🔁 過去に "+pastCount+" 回のご依頼があります（リピート様）";
+    hint.style.display = "block";
+  } else {
+    hint.style.display = "none";
   }
 });
 
