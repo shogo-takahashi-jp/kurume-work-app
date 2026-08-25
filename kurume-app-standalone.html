@@ -153,6 +153,7 @@
           <input id="customerName" list="customerList" placeholder="例：山田太郎" />
           <datalist id="customerList"></datalist>
           <p class="note" id="repeatHint" style="margin:2px 0 0; color:var(--accent); display:none;"></p>
+          <button type="button" class="btn btn-ghost" id="reuseLastBtn" style="margin-top:6px; display:none; font-size:12px; padding:6px 10px;">🔁 前回の内容を引き継ぐ</button>
         </div>
         <div class="field">
           <label class="flabel">電話番号</label>
@@ -290,6 +291,11 @@
   <!-- 一覧タブ -->
   <section id="tab-list">
     <div class="card">
+      <div class="card-title">お客様検索</div>
+      <input id="customerSearch" class="kr-input-plain" placeholder="お客様名で検索（例：髙橋）" style="border:1px solid var(--border); border-radius:8px; padding:9px 10px; font-size:14.5px; background:#FCFDFB; color:var(--ink); width:100%;" />
+      <div id="customerSearchSummary"></div>
+    </div>
+    <div class="card">
       <div class="card-title">受付一覧（新しい順）</div>
       <div id="listWrap"></div>
     </div>
@@ -317,11 +323,15 @@
     </div>
     <div class="card">
       <div class="card-title">手数料の設定</div>
-      <p class="note" style="margin-bottom:12px;">くらしのマーケットの予約手数料は公式には「サービス料金の20%＋消費税（実質22%）」です。決済手数料（カード・後払い）や振込手数料は店舗管理システムの請求明細に表示される実際の数値に合わせて調整してください。</p>
+      <p class="note" style="margin-bottom:12px;">くらしのマーケットの予約手数料は公式には「サービス料金の20%＋消費税（実質22%）」です。ただし20%が2,000円（税抜）未満の場合は、一律2,000円（税抜＝税込2,200円）の最低手数料が適用されます（目安：税込10,000円未満の案件が対象）。決済手数料（カード・後払い）や振込手数料は店舗管理システムの請求明細に表示される実際の数値に合わせて調整してください。</p>
       <div class="grid">
         <div class="field">
           <label class="flabel">基本手数料率（予約手数料・税込）%</label>
           <input inputmode="decimal" id="s_baseFeeRate" />
+        </div>
+        <div class="field">
+          <label class="flabel">最低手数料（円・税込）</label>
+          <input inputmode="numeric" id="s_baseFeeMinimum" />
         </div>
         <div class="field">
           <label class="flabel">カード決済 追加手数料率 %</label>
@@ -360,7 +370,7 @@ const PM = {
   bank:{label:"銀行振込", kind:"bank"},
   other:{label:"その他", kind:"direct"},
 };
-const DEFAULT_SETTINGS = { baseFeeRate:0.22, cardFeeRate:0.04, atoFeeRate:0.045, atoFixedFee:500, transferFixedFee:275 };
+const DEFAULT_SETTINGS = { baseFeeRate:0.22, baseFeeMinimum:2200, cardFeeRate:0.04, atoFeeRate:0.045, atoFixedFee:500, transferFixedFee:275 };
 const LS_RECORDS = "kurume_receipts_v1";
 const LS_SETTINGS = "kurume_fee_settings_v1";
 
@@ -395,10 +405,17 @@ function computeFees(f){
   const discount = Number(f.discountAmount)||0;
   const orderAmount = Math.max(quote-discount,0);
   const pm = PM[f.paymentMethod] || PM.cash;
-  let baseFeeRate=0, baseFee=0, additionalFee=0;
+  let baseFeeRate=0, baseFee=0, additionalFee=0, baseFeeIsMinimum=false;
   if(["kurashi_card","kurashi_ato","kurashi_cash"].includes(pm.kind)){
     baseFeeRate = settings.baseFeeRate;
-    baseFee = Math.round(orderAmount*baseFeeRate);
+    const calculated = orderAmount*baseFeeRate;
+    const minimum = Number(settings.baseFeeMinimum || 0);
+    if(orderAmount > 0 && calculated < minimum){
+      baseFee = Math.round(minimum);
+      baseFeeIsMinimum = true;
+    } else {
+      baseFee = Math.round(calculated);
+    }
   }
   if(pm.kind==="kurashi_card"){ additionalFee = Math.round(orderAmount*settings.cardFeeRate); }
   else if(pm.kind==="kurashi_ato"){ additionalFee = Math.round(orderAmount*settings.atoFeeRate)+Number(settings.atoFixedFee||0); }
@@ -408,7 +425,7 @@ function computeFees(f){
   const netIncome = orderAmount-totalFee-otherExpense;
   const hours = Number(f.workHours)||0;
   const hourlyRate = hours>0 ? Math.round(netIncome/hours) : 0;
-  return {orderAmount, baseFeeRate, baseFee, additionalFee, totalFee, netIncome, hourlyRate};
+  return {orderAmount, baseFeeRate, baseFee, baseFeeIsMinimum, additionalFee, totalFee, netIncome, hourlyRate};
 }
 
 function monthKey(dateStr){ return dateStr ? dateStr.slice(0,7) : null; }
@@ -515,6 +532,7 @@ function resetForm(){
     photoPermission:"", repeatLikelihood:"中", note:"",
   });
   document.getElementById("repeatHint").style.display = "none";
+  document.getElementById("reuseLastBtn").style.display = "none";
   updateComputed();
 }
 
@@ -522,7 +540,9 @@ function updateComputed(){
   const f = getFormValues();
   const fees = computeFees(f);
   document.getElementById("c_order").textContent = yen(fees.orderAmount);
-  document.getElementById("c_baseLabel").textContent = "基本手数料（"+pct(fees.baseFeeRate)+"）";
+  document.getElementById("c_baseLabel").textContent = fees.baseFeeIsMinimum
+    ? "基本手数料（最低手数料）"
+    : "基本手数料（"+pct(fees.baseFeeRate)+"）";
   document.getElementById("c_base").textContent = yen(fees.baseFee);
   document.getElementById("c_add").textContent = yen(fees.additionalFee);
   document.getElementById("c_total").textContent = yen(fees.totalFee);
@@ -545,11 +565,48 @@ function refreshCustomerList(){
 function renderList(){
   document.getElementById("countBadge").textContent = records.length;
   const wrap = document.getElementById("listWrap");
+  const summaryWrap = document.getElementById("customerSearchSummary");
+  const searchTerm = (document.getElementById("customerSearch").value || "").trim();
+
   if(records.length===0){
     wrap.innerHTML = '<div class="empty">まだ受付データがありません。「入力」タブから登録してください。</div>';
+    summaryWrap.innerHTML = "";
     return;
   }
-  const sorted = [...records].sort((a,b)=>(b.inquiryDate||"").localeCompare(a.inquiryDate||""));
+
+  const filtered = searchTerm
+    ? records.filter(r => (r.customerName||"").includes(searchTerm))
+    : records;
+
+  if(searchTerm){
+    if(filtered.length === 0){
+      summaryWrap.innerHTML = '<p class="note" style="margin-top:8px;">「'+esc(searchTerm)+'」に一致するお客様は見つかりませんでした。</p>';
+    } else {
+      const sum = filtered.reduce((acc,r)=>{
+        acc.orderAmount += Number(r.orderAmount)||0;
+        acc.netIncome += Number(r.netIncome)||0;
+        return acc;
+      }, {orderAmount:0, netIncome:0});
+      const dates = filtered.map(r=>r.inquiryDate).filter(Boolean).sort();
+      const firstDate = dates[0] || "―";
+      const lastDate = dates[dates.length-1] || "―";
+      summaryWrap.innerHTML = '<div class="computed" style="margin-top:10px;">'+
+        '<div class="citem"><span class="k">該当件数</span><span class="v">'+filtered.length+'件</span></div>'+
+        '<div class="citem"><span class="k">初回問合せ日</span><span class="v">'+esc(firstDate)+'</span></div>'+
+        '<div class="citem"><span class="k">直近問合せ日</span><span class="v">'+esc(lastDate)+'</span></div>'+
+        '<div class="citem net"><span class="k">累計受注額</span><span class="v">'+yen(sum.orderAmount)+'</span></div>'+
+      '</div>';
+    }
+  } else {
+    summaryWrap.innerHTML = "";
+  }
+
+  if(filtered.length===0){
+    wrap.innerHTML = '<div class="empty">表示する受付データがありません。</div>';
+    return;
+  }
+
+  const sorted = [...filtered].sort((a,b)=>(b.inquiryDate||"").localeCompare(a.inquiryDate||""));
   const customerCounts = {};
   for(const r of records){
     if(r.customerName) customerCounts[r.customerName] = (customerCounts[r.customerName]||0) + 1;
@@ -659,12 +716,33 @@ function editRecord(rec){
 }
 
 /* ---------- monthly ---------- */
+function buildNewCustomerMap(){
+  // 問合せ日の古い順に並べ、各お客様の「最初の依頼」だけを新規と判定する
+  const sortedAll = [...records].sort((a,b)=>(a.inquiryDate||"").localeCompare(b.inquiryDate||""));
+  const seen = new Set();
+  const isNewMap = {};
+  for(const r of sortedAll){
+    if(r.customerName && !seen.has(r.customerName)){
+      isNewMap[r._localId] = true;
+      seen.add(r.customerName);
+    } else {
+      isNewMap[r._localId] = false;
+    }
+  }
+  return isNewMap;
+}
+
+function isPlatformRecord(r){
+  return r.inquiryChannel === "くらしのマーケット";
+}
+
 function renderMonthly(){
   const wrap = document.getElementById("monthlyWrap");
   if(records.length===0){
     wrap.innerHTML = '<div class="card"><div class="empty">集計するデータがまだありません。</div></div>';
     return;
   }
+  const isNewMap = buildNewCustomerMap();
   const totals = records.reduce((acc,r)=>{
     acc.orderAmount += Number(r.orderAmount)||0;
     acc.totalFee += Number(r.totalFee)||0;
@@ -673,12 +751,30 @@ function renderMonthly(){
     return acc;
   }, {orderAmount:0, totalFee:0, netIncome:0, count:0});
 
+  // 新規 vs リピート の平均単価（全期間）
+  let newSum=0, newCount=0, repeatSum=0, repeatCount=0;
+  for(const r of records){
+    const amt = Number(r.orderAmount)||0;
+    if(isNewMap[r._localId]){ newSum += amt; newCount++; }
+    else { repeatSum += amt; repeatCount++; }
+  }
+  const newAvg = newCount>0 ? Math.round(newSum/newCount) : 0;
+  const repeatAvg = repeatCount>0 ? Math.round(repeatSum/repeatCount) : 0;
+
   let html = '<div class="summary-grid">'+
     '<div class="summary-box"><div class="label">累計 受注額</div><div class="value">'+yen(totals.orderAmount)+'</div></div>'+
     '<div class="summary-box"><div class="label">累計 手数料</div><div class="value">'+yen(totals.totalFee)+'</div></div>'+
     '<div class="summary-box"><div class="label">累計 実入金</div><div class="value">'+yen(totals.netIncome)+'</div></div>'+
     '<div class="summary-box"><div class="label">受付件数</div><div class="value">'+totals.count+'件</div></div>'+
     '</div>';
+
+  html += '<div class="card">'+
+    '<div class="card-title">新規 vs リピート 平均単価（全期間）</div>'+
+    '<div class="computed">'+
+      '<div class="citem"><span class="k">新規客 平均単価（'+newCount+'件）</span><span class="v">'+(newCount?yen(newAvg):"―")+'</span></div>'+
+      '<div class="citem"><span class="k">リピート客 平均単価（'+repeatCount+'件）</span><span class="v">'+(repeatCount?yen(repeatAvg):"―")+'</span></div>'+
+    '</div>'+
+  '</div>';
 
   const groups = {};
   for(const r of records){
@@ -698,6 +794,14 @@ function renderMonthly(){
     }, {orderAmount:0, totalFee:0, netIncome:0, hours:0});
     const avgHourly = sum.hours>0 ? Math.round(sum.netIncome/sum.hours) : 0;
     const label = key==="未設定" ? "作業日未設定" : key.replace("-","年")+"月";
+
+    const newCountM = list.filter(r=>isNewMap[r._localId]).length;
+    const repeatCountM = list.length - newCountM;
+    const repeatRate = list.length>0 ? Math.round((repeatCountM/list.length)*1000)/10 : 0;
+    const platformCountM = list.filter(isPlatformRecord).length;
+    const directCountM = list.length - platformCountM;
+    const directRate = list.length>0 ? Math.round((directCountM/list.length)*1000)/10 : 0;
+
     html += '<div class="card">'+
       '<div class="month-title">'+label+'（'+list.length+'件）</div>'+
       '<div class="computed">'+
@@ -705,6 +809,10 @@ function renderMonthly(){
         '<div class="citem"><span class="k">手数料合計</span><span class="v">'+yen(sum.totalFee)+'</span></div>'+
         '<div class="citem net"><span class="k">実入金合計</span><span class="v">'+yen(sum.netIncome)+'</span></div>'+
         '<div class="citem"><span class="k">平均時給目安</span><span class="v">'+(avgHourly?yen(avgHourly)+"/h":"―")+'</span></div>'+
+      '</div>'+
+      '<div class="computed" style="margin-top:8px;">'+
+        '<div class="citem"><span class="k">新規 '+newCountM+'件 ／ リピート '+repeatCountM+'件</span><span class="v">リピート率 '+repeatRate+'%</span></div>'+
+        '<div class="citem"><span class="k">直請け '+directCountM+'件 ／ プラットフォーム '+platformCountM+'件</span><span class="v">直請け率 '+directRate+'%</span></div>'+
       '</div>'+
     '</div>';
   }
@@ -714,6 +822,7 @@ function renderMonthly(){
 /* ---------- settings ---------- */
 function renderSettings(){
   document.getElementById("s_baseFeeRate").value = Math.round(settings.baseFeeRate*1000)/10;
+  document.getElementById("s_baseFeeMinimum").value = settings.baseFeeMinimum;
   document.getElementById("s_cardFeeRate").value = Math.round(settings.cardFeeRate*1000)/10;
   document.getElementById("s_atoFeeRate").value = Math.round(settings.atoFeeRate*1000)/10;
   document.getElementById("s_atoFixedFee").value = settings.atoFixedFee;
@@ -722,6 +831,7 @@ function renderSettings(){
 document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
   settings = {
     baseFeeRate: (Number(document.getElementById("s_baseFeeRate").value)||0)/100,
+    baseFeeMinimum: Number(document.getElementById("s_baseFeeMinimum").value)||0,
     cardFeeRate: (Number(document.getElementById("s_cardFeeRate").value)||0)/100,
     atoFeeRate: (Number(document.getElementById("s_atoFeeRate").value)||0)/100,
     atoFixedFee: Number(document.getElementById("s_atoFixedFee").value)||0,
@@ -753,14 +863,34 @@ document.getElementById("customerName").addEventListener("input", (e)=>{
     if(!document.getElementById("phone").value) document.getElementById("phone").value = match.phone;
   }
   const hint = document.getElementById("repeatHint");
+  const reuseBtn = document.getElementById("reuseLastBtn");
   const name = e.target.value.trim();
   const pastCount = name ? records.filter(r=>r.customerName===name && r._localId!==editingId).length : 0;
   if(pastCount > 0){
     hint.textContent = "🔁 過去に "+pastCount+" 回のご依頼があります（リピート様）";
     hint.style.display = "block";
+    reuseBtn.style.display = editingId ? "none" : "inline-block";
   } else {
     hint.style.display = "none";
+    reuseBtn.style.display = "none";
   }
+});
+
+document.getElementById("reuseLastBtn").addEventListener("click", ()=>{
+  const name = document.getElementById("customerName").value.trim();
+  if(!name) return;
+  const past = records.filter(r=>r.customerName===name).sort((a,b)=>(b.inquiryDate||"").localeCompare(a.inquiryDate||""));
+  if(past.length===0) return;
+  const last = past[0];
+  document.getElementById("area").value = last.area || "";
+  document.getElementById("phone").value = last.phone || "";
+  document.getElementById("requestContent").value = last.requestContent || "";
+  document.getElementById("paymentMethod").value = last.paymentMethod || "kurashi_card";
+  document.getElementById("quoteAmount").value = last.quoteAmount || "";
+  document.getElementById("discountAmount").value = "0";
+  document.getElementById("workHours").value = last.workHours || "";
+  updateComputed();
+  showToast("前回の内容を引き継ぎました。日付・金額を確認してください");
 });
 
 ["quoteAmount","discountAmount","otherExpense","paymentMethod","workHours"].forEach(id=>{
@@ -777,6 +907,7 @@ document.getElementById("workHours").addEventListener("input", (e)=>{
 });
 
 document.getElementById("resetBtn").addEventListener("click", resetForm);
+document.getElementById("customerSearch").addEventListener("input", renderList);
 
 document.getElementById("openMapBtn").addEventListener("click", ()=>{
   openMapForAddress(document.getElementById("area").value);
