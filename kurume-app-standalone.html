@@ -798,9 +798,36 @@ function renderMonthly(){
     const newCountM = list.filter(r=>isNewMap[r._localId]).length;
     const repeatCountM = list.length - newCountM;
     const repeatRate = list.length>0 ? Math.round((repeatCountM/list.length)*1000)/10 : 0;
-    const platformCountM = list.filter(isPlatformRecord).length;
-    const directCountM = list.length - platformCountM;
+    const platformRecords = list.filter(isPlatformRecord);
+    const directRecords = list.filter(r=>!isPlatformRecord(r));
+    const platformCountM = platformRecords.length;
+    const directCountM = directRecords.length;
     const directRate = list.length>0 ? Math.round((directCountM/list.length)*1000)/10 : 0;
+
+    // 月間手数料率
+    const feeRate = sum.orderAmount>0 ? Math.round((sum.totalFee/sum.orderAmount)*1000)/10 : 0;
+
+    // 直請け vs プラットフォーム：実入金・平均時給
+    const sumOf = (arr, key) => arr.reduce((a,r)=>a+(Number(r[key])||0), 0);
+    const directNet = sumOf(directRecords, "netIncome");
+    const platformNet = sumOf(platformRecords, "netIncome");
+    const directNetAvg = directCountM>0 ? Math.round(directNet/directCountM) : 0;
+    const platformNetAvg = platformCountM>0 ? Math.round(platformNet/platformCountM) : 0;
+    const directHours = sumOf(directRecords, "workHours");
+    const platformHours = sumOf(platformRecords, "workHours");
+    const directHourly = directHours>0 ? Math.round(directNet/directHours) : 0;
+    const platformHourly = platformHours>0 ? Math.round(platformNet/platformHours) : 0;
+
+    // チャネル別内訳
+    const channelCounts = {};
+    for(const r of list){
+      const ch = r.inquiryChannel || "未設定";
+      channelCounts[ch] = (channelCounts[ch]||0) + 1;
+    }
+    const channelBreakdown = Object.entries(channelCounts)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([ch,cnt])=>esc(ch)+" "+cnt+"件")
+      .join(" ・ ");
 
     html += '<div class="card">'+
       '<div class="month-title">'+label+'（'+list.length+'件）</div>'+
@@ -809,11 +836,19 @@ function renderMonthly(){
         '<div class="citem"><span class="k">手数料合計</span><span class="v">'+yen(sum.totalFee)+'</span></div>'+
         '<div class="citem net"><span class="k">実入金合計</span><span class="v">'+yen(sum.netIncome)+'</span></div>'+
         '<div class="citem"><span class="k">平均時給目安</span><span class="v">'+(avgHourly?yen(avgHourly)+"/h":"―")+'</span></div>'+
+        '<div class="citem"><span class="k">月間手数料率</span><span class="v">'+feeRate+'%</span></div>'+
       '</div>'+
       '<div class="computed" style="margin-top:8px;">'+
         '<div class="citem"><span class="k">新規 '+newCountM+'件 ／ リピート '+repeatCountM+'件</span><span class="v">リピート率 '+repeatRate+'%</span></div>'+
         '<div class="citem"><span class="k">直請け '+directCountM+'件 ／ プラットフォーム '+platformCountM+'件</span><span class="v">直請け率 '+directRate+'%</span></div>'+
       '</div>'+
+      '<div class="computed" style="margin-top:8px;">'+
+        '<div class="citem"><span class="k">直請け 実入金（1件平均）</span><span class="v">'+(directCountM?yen(directNet)+"（"+yen(directNetAvg)+"）":"―")+'</span></div>'+
+        '<div class="citem"><span class="k">プラットフォーム 実入金（1件平均）</span><span class="v">'+(platformCountM?yen(platformNet)+"（"+yen(platformNetAvg)+"）":"―")+'</span></div>'+
+        '<div class="citem"><span class="k">直請け 平均時給</span><span class="v">'+(directHourly?yen(directHourly)+"/h":"―")+'</span></div>'+
+        '<div class="citem"><span class="k">プラットフォーム 平均時給</span><span class="v">'+(platformHourly?yen(platformHourly)+"/h":"―")+'</span></div>'+
+      '</div>'+
+      (channelBreakdown ? '<p class="note" style="margin-top:8px;">経路内訳：'+channelBreakdown+'</p>' : '')+
     '</div>';
   }
   wrap.innerHTML = html;
