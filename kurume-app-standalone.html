@@ -635,7 +635,7 @@ function renderList(){
     html += '<tr class="kr-row" data-row="'+r._localId+'" style="cursor:pointer;">'+
       '<td>'+esc(r.inquiryDate)+'</td>'+
       '<td>'+esc(r.customerName)+statusBadge+repeatBadge+'</td>'+
-      '<td>'+esc(r.phone||"")+'</td>'+
+      '<td>'+(r.phone ? '<a href="tel:'+esc(r.phone.replace(/[^0-9+]/g,""))+'" style="color:var(--primary); font-weight:600; text-decoration:none;">'+esc(r.phone)+'</a>' : '')+'</td>'+
       '<td style="max-width:220px;white-space:normal;">'+esc(r.requestContent||"")+'</td>'+
       '<td>'+workDateTime+'</td>'+
       '<td><span class="pill '+pillClass+'">'+esc(r.status)+'</span></td>'+
@@ -658,7 +658,7 @@ function renderList(){
   // 行タップで編集（ボタン自体をタップした場合はそちらの処理を優先し、編集は開かない）
   wrap.querySelectorAll(".kr-row").forEach(row=>{
     row.addEventListener("click", (e)=>{
-      if(e.target.closest("button")) return;
+      if(e.target.closest("button") || e.target.closest("a")) return;
       const rec = records.find(r=>r._localId===row.dataset.row);
       if(rec) editRecord(rec);
     });
