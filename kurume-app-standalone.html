@@ -74,6 +74,8 @@
   .pill{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700;}
   .pill-done{background:var(--primarySoft); color:var(--primaryDark);}
   .pill-pending{background:var(--accentSoft); color:var(--accent);}
+  .pill-confirmed{background:#DDEAF2; color:#2E5C7A;}
+  .pill-cancel{background:var(--dangerSoft); color:var(--danger);}
   .linkbtn{background:none; border:none; color:var(--primary); font-weight:700; cursor:pointer; font-size:12px; padding:4px 6px;}
   .linkbtn.danger{color:var(--danger);}
   .empty{text-align:center; color:var(--muted); font-size:13px; padding:30px 10px;}
@@ -562,6 +564,13 @@ function refreshCustomerList(){
 }
 
 /* ---------- list ---------- */
+function statusPillClass(status){
+  if(status==="キャンセル") return "pill-cancel";
+  if(status==="確定") return "pill-confirmed";
+  if(status==="入金済" || status==="作業完了") return "pill-done";
+  return "pill-pending"; // 受付, 見積提示
+}
+
 function renderList(){
   document.getElementById("countBadge").textContent = records.length;
   const wrap = document.getElementById("listWrap");
@@ -616,15 +625,16 @@ function renderList(){
     '<th>受注額</th><th>手数料</th><th>実入金</th><th>支払方法</th><th></th>'+
     '</tr></thead><tbody>';
   for(const r of sorted){
-    const pillClass = (r.status==="入金済"||r.status==="作業完了") ? "pill-done" : "pill-pending";
+    const pillClass = statusPillClass(r.status);
     const workDateTime = r.workDate
       ? esc(r.workDate) + (r.workStartTime ? " " + esc(r.workStartTime) + (r.workEndTime ? "〜"+esc(r.workEndTime) : "") : "")
       : "";
     const count = customerCounts[r.customerName] || 1;
     const repeatBadge = count > 1 ? ' <span class="pill" style="background:var(--accentSoft);color:var(--accent);">リピート('+count+')</span>' : '';
+    const statusBadge = ' <span class="pill '+pillClass+'">'+esc(r.status)+'</span>';
     html += '<tr class="kr-row" data-row="'+r._localId+'" style="cursor:pointer;">'+
       '<td>'+esc(r.inquiryDate)+'</td>'+
-      '<td>'+esc(r.customerName)+repeatBadge+'</td>'+
+      '<td>'+esc(r.customerName)+statusBadge+repeatBadge+'</td>'+
       '<td>'+esc(r.phone||"")+'</td>'+
       '<td style="max-width:220px;white-space:normal;">'+esc(r.requestContent||"")+'</td>'+
       '<td>'+workDateTime+'</td>'+
