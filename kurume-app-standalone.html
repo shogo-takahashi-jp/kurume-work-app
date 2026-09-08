@@ -298,10 +298,19 @@
       <div id="customerSearchSummary"></div>
     </div>
     <div class="card">
-      <div class="card-title">受付一覧（新しい順）</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:4px;">
+        <div class="card-title" id="listTitle" style="margin-bottom:0;">受付一覧（新しい順）</div>
+        <select id="listSortModeSelect" style="border:1px solid var(--border); border-radius:8px; padding:6px 8px; font-size:12px; background:#FCFDFB; color:var(--ink);">
+          <option value="recent">🕐 新しい順</option>
+          <option value="upcoming">🗓 次の作業順（確定）</option>
+          <option value="quoting">📋 見積回答待ち</option>
+          <option value="unpaid">💴 未入金（作業完了）</option>
+        </select>
+      </div>
       <div id="listWrap"></div>
     </div>
   </section>
+
 
   <!-- 月次集計タブ -->
   <section id="tab-monthly">
@@ -380,6 +389,7 @@ const LS_SETTINGS = "kurume_fee_settings_v1";
 let records = JSON.parse(localStorage.getItem(LS_RECORDS) || "[]");
 let settings = Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}"));
 let editingId = null;
+let listSortMode = "recent"; // "recent"（新しい順） または "upcoming"（次の作業順）
 
 /* ---------- utils ---------- */
 function todayStr(){
@@ -610,12 +620,40 @@ function renderList(){
     summaryWrap.innerHTML = "";
   }
 
-  if(filtered.length===0){
-    wrap.innerHTML = '<div class="empty">表示する受付データがありません。</div>';
+  const SORT_MODE_CONFIG = {
+    recent:   { statusFilter: null,      emptyMsg: "表示する受付データがありません。", title: "受付一覧（新しい順）" },
+    upcoming: { statusFilter: "確定",     emptyMsg: "ステータスが「確定」の案件がありません。", title: "次の作業順（確定案件・作業日が近い順）" },
+    quoting:  { statusFilter: "見積提示", emptyMsg: "ステータスが「見積提示」の案件がありません。", title: "見積回答待ち（問合せが古い順）" },
+    unpaid:   { statusFilter: "作業完了", emptyMsg: "ステータスが「作業完了」で未入金の案件がありません。", title: "未入金（作業完了・古い順）" },
+  };
+  const cfg = SORT_MODE_CONFIG[listSortMode] || SORT_MODE_CONFIG.recent;
+
+  let listForDisplay = filtered;
+  if(cfg.statusFilter){
+    listForDisplay = filtered.filter(r => r.status === cfg.statusFilter);
+  }
+
+  document.getElementById("listTitle").textContent = cfg.title;
+
+  if(listForDisplay.length===0){
+    wrap.innerHTML = '<div class="empty">'+cfg.emptyMsg+'</div>';
     return;
   }
 
-  const sorted = [...filtered].sort((a,b)=>(b.inquiryDate||"").localeCompare(a.inquiryDate||""));
+  let sorted;
+  if(listSortMode === "upcoming"){
+    // 作業日が近い順。未設定は最後に回す
+    sorted = [...listForDisplay].sort((a,b)=>(a.workDate||"9999-99-99").localeCompare(b.workDate||"9999-99-99"));
+  } else if(listSortMode === "quoting"){
+    // 問合せが古い順（対応が遅れているものほど上に）
+    sorted = [...listForDisplay].sort((a,b)=>(a.inquiryDate||"").localeCompare(b.inquiryDate||""));
+  } else if(listSortMode === "unpaid"){
+    // 作業日が古い順（未入金が長引いているものほど上に）
+    sorted = [...listForDisplay].sort((a,b)=>(a.workDate||a.inquiryDate||"").localeCompare(b.workDate||b.inquiryDate||""));
+  } else {
+    sorted = [...listForDisplay].sort((a,b)=>(b.inquiryDate||"").localeCompare(a.inquiryDate||""));
+  }
+
   const customerCounts = {};
   for(const r of records){
     if(r.customerName) customerCounts[r.customerName] = (customerCounts[r.customerName]||0) + 1;
@@ -953,6 +991,10 @@ document.getElementById("workHours").addEventListener("input", (e)=>{
 
 document.getElementById("resetBtn").addEventListener("click", resetForm);
 document.getElementById("customerSearch").addEventListener("input", renderList);
+document.getElementById("listSortModeSelect").addEventListener("change", (e)=>{
+  listSortMode = e.target.value;
+  renderList();
+});
 
 document.getElementById("openMapBtn").addEventListener("click", ()=>{
   openMapForAddress(document.getElementById("area").value);
