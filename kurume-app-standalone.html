@@ -642,8 +642,9 @@ function renderList(){
 
   let sorted;
   if(listSortMode === "upcoming"){
-    // 作業日が近い順。未設定は最後に回す
-    sorted = [...listForDisplay].sort((a,b)=>(a.workDate||"9999-99-99").localeCompare(b.workDate||"9999-99-99"));
+    // 作業日＋開始時刻が近い順。日付未設定は最後、同日中は開始時刻未設定を後ろに回す
+    const workSortKey = (r) => (r.workDate || "9999-99-99") + "T" + (r.workStartTime || "99:99");
+    sorted = [...listForDisplay].sort((a,b)=>workSortKey(a).localeCompare(workSortKey(b)));
   } else if(listSortMode === "quoting"){
     // 問合せが古い順（対応が遅れているものほど上に）
     sorted = [...listForDisplay].sort((a,b)=>(a.inquiryDate||"").localeCompare(b.inquiryDate||""));
