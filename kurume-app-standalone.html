@@ -102,7 +102,8 @@
 <div class="container">
   <div class="header">
     <div class="title">くるめ生活サポート 受付管理</div>
-    <div class="subtitle">問合せ〜手数料計算〜集計をまとめて管理（このスマホ内に保存）</div>
+    <div class="subtitle">問合せ〜手数料計算〜集計をまとめて管理（クラウド同期）</div>
+    <div class="subtitle" id="syncStatus" style="margin-top:2px;">🔄 起動中…</div>
   </div>
 
   <div class="tabs">
@@ -385,6 +386,51 @@ const DEFAULT_SETTINGS = { baseFeeRate:0.22, baseFeeMinimum:2200, cardFeeRate:0.
 const LS_RECORDS = "kurume_receipts_v1";
 const LS_SETTINGS = "kurume_fee_settings_v1";
 
+/* ---------- クラウド同期（Googleスプレッドシート） ---------- */
+const API_URL = "https://script.google.com/macros/s/AKfycbwBjUOPHL6uXvEhyzjMlQnHXW3dtQhPw2k-VaVw5cKQgRKaGFluC51VX1mSMdJIfI_2_g/exec";
+const API_TOKEN = "8UP_o1XnObfp9zOmpJctGZPImMnIBS1h";
+
+function setSyncStatus(text, isError){
+  const el = document.getElementById("syncStatus");
+  if(!el) return;
+  el.textContent = text;
+  el.style.color = isError ? "var(--danger)" : "var(--muted)";
+}
+
+async function fetchFromCloud(){
+  setSyncStatus("🔄 クラウドと同期中…");
+  try {
+    const res = await fetch(API_URL + "?token=" + encodeURIComponent(API_TOKEN));
+    const data = await res.json();
+    if(data.error){
+      setSyncStatus("⚠ クラウド同期エラー（この端末のデータを表示中）", true);
+      return null;
+    }
+    setSyncStatus("✅ クラウドと同期済み（最終: " + new Date().toLocaleTimeString("ja-JP") + "）");
+    return data;
+  } catch(err){
+    setSyncStatus("⚠ オフライン（この端末のデータを表示中）", true);
+    return null;
+  }
+}
+
+async function pushRecordsToCloud(){
+  try {
+    await fetch(API_URL, { method:"POST", body: JSON.stringify({ token: API_TOKEN, records }) });
+    setSyncStatus("✅ クラウドと同期済み（最終: " + new Date().toLocaleTimeString("ja-JP") + "）");
+  } catch(err){
+    setSyncStatus("⚠ クラウドへの保存に失敗しました（この端末には保存済み）", true);
+  }
+}
+
+async function pushSettingsToCloud(){
+  try {
+    await fetch(API_URL, { method:"POST", body: JSON.stringify({ token: API_TOKEN, settings }) });
+  } catch(err){
+    setSyncStatus("⚠ クラウドへの保存に失敗しました（この端末には保存済み）", true);
+  }
+}
+
 /* ---------- state ---------- */
 let records = JSON.parse(localStorage.getItem(LS_RECORDS) || "[]");
 let settings = Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}"));
@@ -404,8 +450,14 @@ function makeReceiptId(inquiryDate){
   const seq = String(records.length+1).padStart(3,"0");
   return mmdd+"-"+seq;
 }
-function saveRecords(){ localStorage.setItem(LS_RECORDS, JSON.stringify(records)); }
-function saveSettingsToStorage(){ localStorage.setItem(LS_SETTINGS, JSON.stringify(settings)); }
+function saveRecords(){
+  localStorage.setItem(LS_RECORDS, JSON.stringify(records));
+  pushRecordsToCloud();
+}
+function saveSettingsToStorage(){
+  localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
+  pushSettingsToCloud();
+}
 function showToast(msg){
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
@@ -1085,6 +1137,35 @@ document.getElementById("importFileInput").addEventListener("change", (e)=>{
 resetForm();
 refreshCustomerList();
 renderList();
+
+(async function initFromCloud(){
+  const cloud = await fetchFromCloud();
+  if(cloud){
+    const cloudHasRecords = Array.isArray(cloud.records) && cloud.records.length > 0;
+    const localHasRecords = records.length > 0;
+    if(cloudHasRecords){
+      // クラウド側にデータがあれば、そちらを正とする
+      records = cloud.records;
+    } else if(localHasRecords){
+      // クラウドが空でこの端末にデータがある＝初回移行。ローカルの内容をクラウドへ送る
+      await pushRecordsToCloud();
+    }
+
+    const cloudHasSettings = cloud.settings && Object.keys(cloud.settings).length > 0;
+    if(cloudHasSettings){
+      settings = Object.assign({}, DEFAULT_SETTINGS, cloud.settings);
+    } else {
+      await pushSettingsToCloud();
+    }
+
+    localStorage.setItem(LS_RECORDS, JSON.stringify(records));
+    localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
+    refreshCustomerList();
+    renderList();
+    renderMonthly();
+    resetForm();
+  }
+})();
 </script>
 </body>
 </html>
