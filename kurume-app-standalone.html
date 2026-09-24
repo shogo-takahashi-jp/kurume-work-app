@@ -531,7 +531,7 @@ function buildCalendarUrl({ title, dateStr, startTime, endTime, location, detail
     const end = nextDayCompact(dateStr);
     params.set("dates", start + "/" + end);
   }
-  return "https://calendar.google.com/calendar/render?" + params.toString();
+  return "https://calendar.google.com/calendar/r/eventedit?" + params.toString();
 }
 
 function addToCalendarFromForm(){
