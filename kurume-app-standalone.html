@@ -534,11 +534,63 @@ function buildCalendarUrl({ title, dateStr, startTime, endTime, location, detail
   return "https://calendar.google.com/calendar/r/eventedit?" + params.toString();
 }
 
+/* ---------- iPhone標準カレンダーに追加（.ics方式） ---------- */
+function icsEscape(text){
+  return String(text || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+function buildIcsContent({ title, dateStr, startTime, endTime, location, details }){
+  const uid = "kurume-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "@kurume-work-app";
+  const now = new Date();
+  const dtstamp = now.getUTCFullYear() + String(now.getUTCMonth()+1).padStart(2,"0") + String(now.getUTCDate()).padStart(2,"0")
+    + "T" + String(now.getUTCHours()).padStart(2,"0") + String(now.getUTCMinutes()).padStart(2,"0") + String(now.getUTCSeconds()).padStart(2,"0") + "Z";
+
+  let dtStartLine, dtEndLine;
+  if(startTime && endTime){
+    const start = ymdCompact(dateStr) + "T" + startTime.replace(":", "") + "00";
+    const end = ymdCompact(dateStr) + "T" + endTime.replace(":", "") + "00";
+    dtStartLine = "DTSTART:" + start;
+    dtEndLine = "DTEND:" + end;
+  } else {
+    dtStartLine = "DTSTART;VALUE=DATE:" + ymdCompact(dateStr);
+    dtEndLine = "DTEND;VALUE=DATE:" + nextDayCompact(dateStr);
+  }
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//kurume-work-app//JP",
+    "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    "UID:" + uid,
+    "DTSTAMP:" + dtstamp,
+    dtStartLine,
+    dtEndLine,
+    "SUMMARY:" + icsEscape(title),
+    "LOCATION:" + icsEscape(location),
+    "DESCRIPTION:" + icsEscape(details),
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+  return lines.join("\r\n");
+}
+
+function addToNativeCalendar({ title, dateStr, startTime, endTime, location, details }){
+  if(!dateStr){ showToast("作業日を入力してください"); return; }
+  const ics = buildIcsContent({ title, dateStr, startTime, endTime, location, details });
+  const dataUri = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics);
+  window.location.href = dataUri;
+}
+
 function addToCalendarFromForm(){
   const f = getFormValues();
   if(!f.workDate){ showToast("作業日を入力してください"); return; }
   const title = (f.customerName ? f.customerName + "様 " : "") + (f.requestContent || "作業");
-  const url = buildCalendarUrl({
+  addToNativeCalendar({
     title,
     dateStr: f.workDate,
     startTime: f.workStartTime,
@@ -546,7 +598,6 @@ function addToCalendarFromForm(){
     location: f.area,
     details: (f.requestContent || "") + (f.phone ? "\n電話: " + f.phone : ""),
   });
-  if(url) window.open(url, "_blank");
 }
 
 /* ---------- customer index ---------- */
@@ -767,7 +818,7 @@ function renderList(){
       const rec = records.find(r=>r._localId===btn.dataset.cal);
       if(!rec) return;
       const title = (rec.customerName ? rec.customerName + "様 " : "") + (rec.requestContent || "作業");
-      const url = buildCalendarUrl({
+      addToNativeCalendar({
         title,
         dateStr: rec.workDate,
         startTime: rec.workStartTime,
@@ -775,7 +826,6 @@ function renderList(){
         location: rec.area,
         details: (rec.requestContent || "") + (rec.phone ? "\n電話: " + rec.phone : ""),
       });
-      if(url) window.open(url, "_blank");
     });
   });
   wrap.querySelectorAll("[data-edit]").forEach(btn=>{
