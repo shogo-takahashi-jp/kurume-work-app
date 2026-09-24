@@ -582,8 +582,10 @@ function buildIcsContent({ title, dateStr, startTime, endTime, location, details
 function addToNativeCalendar({ title, dateStr, startTime, endTime, location, details }){
   if(!dateStr){ showToast("作業日を入力してください"); return; }
   const ics = buildIcsContent({ title, dateStr, startTime, endTime, location, details });
-  const dataUri = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics);
-  window.location.href = dataUri;
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  window.location.href = url;
+  setTimeout(()=>URL.revokeObjectURL(url), 10000);
 }
 
 function addToCalendarFromForm(){
