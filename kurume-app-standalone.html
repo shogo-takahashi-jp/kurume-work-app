@@ -200,6 +200,15 @@
       </div>
     </div>
 
+    <div class="card" id="photoCard" style="display:none;">
+      <div class="card-title">📷 現場写真</div>
+      <div id="photoThumbs" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;"></div>
+      <input type="file" id="photoInput" accept="image/*" capture="environment" multiple style="display:none;" />
+      <button type="button" class="btn btn-ghost" id="photoAddBtn">📷 写真を追加</button>
+      <p class="note" id="photoUploadStatus" style="margin-top:8px;"></p>
+    </div>
+    <p class="note" id="photoHintNew" style="margin:-4px 0 14px;">📷 写真は登録した後、一覧から編集画面を開くと追加できます。</p>
+
     <div class="card">
       <div class="card-title">金額・手数料</div>
       <div class="row3">
@@ -432,6 +441,101 @@ async function pushSettingsToCloud(){
   }
 }
 
+/* ---------- 現場写真（Googleドライブ・限定公開） ---------- */
+function photoUrl(fileId){
+  return API_URL + "?token=" + encodeURIComponent(API_TOKEN) + "&action=photo&fileId=" + encodeURIComponent(fileId);
+}
+
+function resizeImageFile(file, maxDim, quality){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = (e) => { img.src = e.target.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      let { width, height } = img;
+      if(width > maxDim || height > maxDim){
+        if(width > height){ height = Math.round(height * maxDim / width); width = maxDim; }
+        else { width = Math.round(width * maxDim / height); height = maxDim; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", quality || 0.82);
+      resolve(dataUrl.split(",")[1]); // base64本体だけ返す
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadPhotosForCurrentRecord(fileList){
+  if(!editingId){ showToast("先に登録してから写真を追加してください"); return; }
+  const rec = records.find(r=>r._localId===editingId);
+  if(!rec) return;
+  if(!rec.photos) rec.photos = [];
+  const statusEl = document.getElementById("photoUploadStatus");
+  const files = Array.from(fileList);
+  for(let i=0; i<files.length; i++){
+    const file = files[i];
+    statusEl.textContent = "アップロード中… (" + (i+1) + "/" + files.length + ")";
+    try {
+      const base64 = await resizeImageFile(file, 1600, 0.82);
+      const res = await fetch(API_URL, {
+        method:"POST",
+        body: JSON.stringify({
+          token: API_TOKEN,
+          action: "uploadPhoto",
+          recordId: editingId,
+          filename: file.name || ("photo_" + Date.now() + ".jpg"),
+          mimeType: "image/jpeg",
+          dataBase64: base64,
+        }),
+      });
+      const data = await res.json();
+      if(data.error){ throw new Error(data.error); }
+      rec.photos.push({ fileId: data.fileId, filename: data.filename });
+    } catch(err){
+      statusEl.textContent = "⚠ アップロードに失敗した写真があります";
+      showToast("写真のアップロードに失敗しました");
+    }
+  }
+  statusEl.textContent = "";
+  await saveRecords();
+  renderPhotoThumbs(rec);
+  renderList();
+}
+
+function renderPhotoThumbs(rec){
+  const wrap = document.getElementById("photoThumbs");
+  const photos = (rec && rec.photos) || [];
+  if(photos.length===0){
+    wrap.innerHTML = '<p class="note">まだ写真がありません。</p>';
+    return;
+  }
+  wrap.innerHTML = photos.map((p, idx) =>
+    '<div style="position:relative;">' +
+      '<img src="'+photoUrl(p.fileId)+'" alt="現場写真" style="width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--border);" />' +
+      '<button type="button" class="linkbtn danger" data-photo-del="'+idx+'" style="position:absolute; top:-6px; right:-6px; background:white; border-radius:999px; padding:2px 6px; box-shadow:0 1px 4px rgba(0,0,0,0.2);">✕</button>' +
+    '</div>'
+  ).join("");
+  wrap.querySelectorAll("[data-photo-del]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      if(!confirm("この写真を削除しますか？")) return;
+      const idx = Number(btn.dataset.photoDel);
+      const rec2 = records.find(r=>r._localId===editingId);
+      if(!rec2 || !rec2.photos) return;
+      const [removed] = rec2.photos.splice(idx, 1);
+      await saveRecords();
+      renderPhotoThumbs(rec2);
+      renderList();
+      if(removed){
+        fetch(API_URL, { method:"POST", body: JSON.stringify({ token: API_TOKEN, action:"deletePhoto", fileId: removed.fileId }) }).catch(()=>{});
+      }
+    });
+  });
+}
+
 /* ---------- state ---------- */
 let records = JSON.parse(localStorage.getItem(LS_RECORDS) || "[]");
 let settings = Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}"));
@@ -651,6 +755,8 @@ function resetForm(){
   });
   document.getElementById("repeatHint").style.display = "none";
   document.getElementById("reuseLastBtn").style.display = "none";
+  document.getElementById("photoCard").style.display = "none";
+  document.getElementById("photoHintNew").style.display = "block";
   updateComputed();
 }
 
@@ -777,9 +883,10 @@ function renderList(){
     const count = customerCounts[r.customerName] || 1;
     const repeatBadge = count > 1 ? ' <span class="pill" style="background:var(--accentSoft);color:var(--accent);">リピート('+count+')</span>' : '';
     const statusBadge = ' <span class="pill '+pillClass+'">'+esc(r.status)+'</span>';
+    const photoBadge = (r.photos && r.photos.length > 0) ? ' <span class="pill" style="background:var(--primarySoft);color:var(--primaryDark);">📷'+r.photos.length+'</span>' : '';
     html += '<tr class="kr-row" data-row="'+r._localId+'" style="cursor:pointer;">'+
       '<td>'+esc(r.inquiryDate)+'</td>'+
-      '<td>'+esc(r.customerName)+statusBadge+repeatBadge+'</td>'+
+      '<td>'+esc(r.customerName)+statusBadge+repeatBadge+photoBadge+'</td>'+
       '<td>'+(r.phone ? '<a href="tel:'+esc(r.phone.replace(/[^0-9+]/g,""))+'" style="color:var(--primary); font-weight:600; text-decoration:none;">'+esc(r.phone)+'</a>' : '')+'</td>'+
       '<td style="max-width:220px;white-space:normal;">'+esc(r.requestContent||"")+'</td>'+
       '<td>'+workDateTime+'</td>'+
@@ -866,13 +973,16 @@ function editRecord(rec){
     hint.style.display = "none";
   }
   updateComputed();
+  document.getElementById("photoCard").style.display = "block";
+  document.getElementById("photoHintNew").style.display = "none";
+  renderPhotoThumbs(rec);
   switchTab("input");
 }
 
 /* ---------- monthly ---------- */
-function buildNewCustomerMap(){
-  // 問合せ日の古い順に並べ、各お客様の「最初の依頼」だけを新規と判定する
-  const sortedAll = [...records].sort((a,b)=>(a.inquiryDate||"").localeCompare(b.inquiryDate||""));
+function buildNewCustomerMap(activeRecords){
+  // 問合せ日の古い順に並べ、各お客様の「最初の依頼」だけを新規と判定する（キャンセルは除く）
+  const sortedAll = [...activeRecords].sort((a,b)=>(a.inquiryDate||"").localeCompare(b.inquiryDate||""));
   const seen = new Set();
   const isNewMap = {};
   for(const r of sortedAll){
@@ -896,8 +1006,14 @@ function renderMonthly(){
     wrap.innerHTML = '<div class="card"><div class="empty">集計するデータがまだありません。</div></div>';
     return;
   }
-  const isNewMap = buildNewCustomerMap();
-  const totals = records.reduce((acc,r)=>{
+  // キャンセル案件は売上として発生していないため、集計からは除外する
+  const activeRecords = records.filter(r => r.status !== "キャンセル");
+  if(activeRecords.length===0){
+    wrap.innerHTML = '<div class="card"><div class="empty">集計対象のデータがまだありません（すべてキャンセルの案件です）。</div></div>';
+    return;
+  }
+  const isNewMap = buildNewCustomerMap(activeRecords);
+  const totals = activeRecords.reduce((acc,r)=>{
     acc.orderAmount += Number(r.orderAmount)||0;
     acc.totalFee += Number(r.totalFee)||0;
     acc.netIncome += Number(r.netIncome)||0;
@@ -907,7 +1023,7 @@ function renderMonthly(){
 
   // 新規 vs リピート の平均単価（全期間）
   let newSum=0, newCount=0, repeatSum=0, repeatCount=0;
-  for(const r of records){
+  for(const r of activeRecords){
     const amt = Number(r.orderAmount)||0;
     if(isNewMap[r._localId]){ newSum += amt; newCount++; }
     else { repeatSum += amt; repeatCount++; }
@@ -921,6 +1037,7 @@ function renderMonthly(){
     '<div class="summary-box"><div class="label">累計 実入金</div><div class="value">'+yen(totals.netIncome)+'</div></div>'+
     '<div class="summary-box"><div class="label">受付件数</div><div class="value">'+totals.count+'件</div></div>'+
     '</div>';
+  html += '<p class="note" style="margin:-6px 0 12px;">※キャンセル案件は集計から除外しています。</p>';
 
   html += '<div class="card">'+
     '<div class="card-title">新規 vs リピート 平均単価（全期間）</div>'+
@@ -931,7 +1048,7 @@ function renderMonthly(){
   '</div>';
 
   const groups = {};
-  for(const r of records){
+  for(const r of activeRecords){
     const key = monthKey(r.workDate) || monthKey(r.inquiryDate) || "未設定";
     if(!groups[key]) groups[key] = [];
     groups[key].push(r);
@@ -948,6 +1065,10 @@ function renderMonthly(){
     }, {orderAmount:0, totalFee:0, netIncome:0, hours:0});
     const avgHourly = sum.hours>0 ? Math.round(sum.netIncome/sum.hours) : 0;
     const label = key==="未設定" ? "作業日未設定" : key.replace("-","年")+"月";
+
+    // 未入金額（作業完了のまま入金済になっていない案件の合計）
+    const unpaidList = list.filter(r => r.status === "作業完了");
+    const unpaidAmount = unpaidList.reduce((a,r)=>a+(Number(r.netIncome)||0), 0);
 
     const newCountM = list.filter(r=>isNewMap[r._localId]).length;
     const repeatCountM = list.length - newCountM;
@@ -991,6 +1112,7 @@ function renderMonthly(){
         '<div class="citem net"><span class="k">実入金合計</span><span class="v">'+yen(sum.netIncome)+'</span></div>'+
         '<div class="citem"><span class="k">平均時給目安</span><span class="v">'+(avgHourly?yen(avgHourly)+"/h":"―")+'</span></div>'+
         '<div class="citem"><span class="k">月間手数料率</span><span class="v">'+feeRate+'%</span></div>'+
+        '<div class="citem"><span class="k">未入金額（作業完了・未回収）</span><span class="v" style="color:'+(unpaidAmount>0?'var(--danger)':'inherit')+';">'+(unpaidList.length?yen(unpaidAmount)+"（"+unpaidList.length+"件）":"¥0")+'</span></div>'+
       '</div>'+
       '<div class="computed" style="margin-top:8px;">'+
         '<div class="citem"><span class="k">新規 '+newCountM+'件 ／ リピート '+repeatCountM+'件</span><span class="v">リピート率 '+repeatRate+'%</span></div>'+
@@ -1107,12 +1229,23 @@ document.getElementById("openMapBtn").addEventListener("click", ()=>{
 });
 document.getElementById("addCalendarBtn").addEventListener("click", addToCalendarFromForm);
 
+document.getElementById("photoAddBtn").addEventListener("click", ()=>{
+  document.getElementById("photoInput").click();
+});
+document.getElementById("photoInput").addEventListener("change", (e)=>{
+  if(e.target.files && e.target.files.length > 0){
+    uploadPhotosForCurrentRecord(e.target.files);
+  }
+  e.target.value = "";
+});
+
 document.getElementById("submitBtn").addEventListener("click", ()=>{
   const f = getFormValues();
   if(!f.customerName.trim()){ showToast("お客様名を入力してください"); return; }
   if(!f.quoteAmount){ showToast("見積提示額を入力してください"); return; }
   const fees = computeFees(f);
-  const record = Object.assign({}, f, fees, {_localId: editingId || ("r_"+Date.now())});
+  const existing = editingId ? records.find(r=>r._localId===editingId) : null;
+  const record = Object.assign({}, existing || {}, f, fees, {_localId: editingId || ("r_"+Date.now())});
 
   if(editingId){
     records = records.map(r=>r._localId===editingId ? record : r);
