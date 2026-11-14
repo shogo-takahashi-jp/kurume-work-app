@@ -97,6 +97,45 @@
   .toast.show{opacity:1;}
   section{display:none;}
   section.active{display:block;}
+
+  /* ---- 請求書・作業報告書 ---- */
+  #invOverlay{position:fixed; inset:0; background:#e4e7e1; z-index:100; overflow:auto; display:none; -webkit-overflow-scrolling:touch;}
+  #invOverlay.show{display:block;}
+  .inv-toolbar{position:sticky; top:0; z-index:2; display:flex; gap:8px; padding:10px 12px; background:#fff; border-bottom:1px solid var(--border); align-items:center;}
+  .inv-panel{max-width:760px; margin:12px auto; padding:0 12px;}
+  .inv-itemrow{display:flex; gap:6px; margin-bottom:6px; align-items:center;}
+  .inv-itemrow input[data-k="desc"]{flex:1; min-width:0;}
+  .inv-itemrow input[data-k="amount"]{width:110px;}
+  .inv-page{width:210mm; min-height:297mm; box-sizing:border-box; padding:16mm; background:#fff; margin:0 auto 14px; color:#111; font-size:13px; line-height:1.6; box-shadow:0 1px 6px rgba(0,0,0,.15); font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;}
+  .inv-page h1{font-size:26px; letter-spacing:.5em; text-align:center; margin:0 0 18px; font-weight:600;}
+  .inv-head{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:14px;}
+  .inv-to{font-size:19px; border-bottom:1.5px solid #111; padding:0 8px 2px 0; display:inline-block; min-width:60mm;}
+  .inv-meta{text-align:right; font-size:12px;}
+  .inv-total{display:flex; justify-content:space-between; align-items:baseline; border:1.5px solid #111; padding:8px 14px; margin:14px 0; font-size:15px;}
+  .inv-total b{font-size:24px;}
+  .inv-table{width:100%; min-width:0; border-collapse:collapse; table-layout:fixed; margin-bottom:10px;}
+  .inv-table th{color:#111; white-space:normal;}
+  .inv-table td{white-space:normal; overflow-wrap:anywhere;}
+  #invOverlay input[type="checkbox"]{width:auto; flex:none; margin:0;}
+  .inv-table th,.inv-table td{border:1px solid #888; padding:6px 8px; text-align:left; font-size:13px;}
+  .inv-table th{background:#f1f1ee; font-weight:600;}
+  .inv-table td.amt,.inv-table th.amt{text-align:right; white-space:nowrap; width:34mm;}
+  .inv-box{border:1px solid #888; padding:8px 12px; margin-bottom:10px; font-size:13px;}
+  .inv-issuer{margin-top:14px; text-align:right; font-size:13px; line-height:1.7;}
+  .inv-issuer .nm{font-size:16px; font-weight:600;}
+  .inv-note{margin-top:12px; font-size:12px; white-space:pre-wrap;}
+  .rep-photos{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;}
+  .rep-photos img{width:100%; max-height:78mm; object-fit:contain; background:#f4f4f2; border:1px solid #ccc;}
+  .rep-comment{white-space:pre-wrap; border:1px solid #888; padding:8px 12px; min-height:30mm;}
+  @media print{
+    @page{size:A4; margin:12mm;}
+    html,body{background:#fff !important;}
+    .container,.toast,.inv-noprint{display:none !important;}
+    #invOverlay{position:static !important; display:block !important; background:#fff !important; overflow:visible !important;}
+    #invZoomWrap{zoom:1 !important;}
+    .inv-page{width:auto; min-height:0; padding:0; margin:0; box-shadow:none; page-break-after:always; break-after:page;}
+    .inv-page:last-child{page-break-after:auto; break-after:auto;}
+  }
 </style>
 </head>
 <body>
@@ -149,6 +188,7 @@
             <option>見積提示</option>
             <option>確定</option>
             <option>作業完了</option>
+            <option>請求書提出済</option>
             <option>入金済</option>
             <option>キャンセル</option>
           </select>
@@ -163,6 +203,21 @@
         <div class="field">
           <label class="flabel">電話番号</label>
           <input type="tel" id="phone" placeholder="090-1234-5678" />
+        </div>
+        <div class="field">
+          <label class="flabel">顧客区分</label>
+          <select id="customerType">
+            <option>個人</option>
+            <option>不動産オーナー</option>
+            <option>管理会社</option>
+          </select>
+        </div>
+        <div class="field" id="propertyFields" style="display:none;">
+          <label class="flabel">物件名・部屋番号（作業場所）</label>
+          <div style="display:flex; gap:8px;">
+            <input id="propertyName" placeholder="例：○○アパート" style="flex:2;" />
+            <input id="roomNo" placeholder="例：201号室" style="flex:1;" />
+          </div>
         </div>
         <div class="field">
           <label class="flabel">エリア・住所</label>
@@ -209,6 +264,17 @@
       <p class="note" id="photoUploadStatus" style="margin-top:8px;"></p>
     </div>
     <p class="note" id="photoHintNew" style="margin:-4px 0 14px;">📷 写真は登録した後、一覧から編集画面を開くと追加できます。</p>
+
+    <div class="card" id="invoiceCard" style="display:none;">
+      <div class="card-title">🧾 請求書・作業報告書</div>
+      <div class="field">
+        <label class="flabel">作業報告コメント（作業報告書に載ります。メモ欄の内容は載りません）</label>
+        <textarea id="workReport" placeholder="例：キャビネット2点、デスク1点の組み立てを行いました。固定金具も取り付け済みです。"></textarea>
+      </div>
+      <p class="note" id="invoiceInfo" style="margin:0 0 8px;"></p>
+      <button type="button" class="btn btn-primary" id="openInvoiceBtn">🧾 請求書・作業報告書を作る</button>
+      <p class="note" style="margin-top:8px;">ボタンを押すと、この画面の内容をいったん保存してから、請求書の画面を開きます。</p>
+    </div>
 
     <div class="card">
       <div class="card-title">金額・手数料</div>
@@ -316,7 +382,7 @@
           <option value="recent">🕐 新しい順</option>
           <option value="upcoming">🗓 次の作業順（確定）</option>
           <option value="quoting">📋 見積回答待ち</option>
-          <option value="unpaid">💴 未入金（作業完了）</option>
+          <option value="unpaid">💴 未入金（作業完了・請求書提出済）</option>
         </select>
       </div>
       <div id="listWrap"></div>
@@ -377,7 +443,63 @@
         <button class="btn btn-primary" id="saveSettingsBtn">設定を保存</button>
       </div>
     </div>
+    <div class="card">
+      <div class="card-title">事業者情報（請求書に表示）</div>
+      <p class="note" style="margin-bottom:12px;">請求書と作業報告書に載せる、屋号・住所・振込先です。ここに入力した内容は、合言葉で守られたクラウド側に保存されます（アプリのコードには含まれません）。</p>
+      <div class="grid">
+        <div class="field"><label class="flabel">屋号</label><input id="b_name" placeholder="例：くるめ生活サポート" /></div>
+        <div class="field"><label class="flabel">お名前</label><input id="b_owner" placeholder="例：髙橋章悟" /></div>
+        <div class="field"><label class="flabel">郵便番号</label><input id="b_zip" inputmode="numeric" placeholder="例：203-0032" /></div>
+        <div class="field"><label class="flabel">電話番号</label><input id="b_phone" type="tel" placeholder="例：070-1234-5678" /></div>
+      </div>
+      <div class="field"><label class="flabel">住所</label><input id="b_address" placeholder="例：東京都東久留米市○○1-2-3" /></div>
+      <div class="grid">
+        <div class="field"><label class="flabel">銀行名</label><input id="b_bank" placeholder="例：三井住友銀行" /></div>
+        <div class="field"><label class="flabel">支店名</label><input id="b_branch" placeholder="例：花小金井支店" /></div>
+        <div class="field"><label class="flabel">口座種別</label><select id="b_accType"><option>普通</option><option>当座</option></select></div>
+        <div class="field"><label class="flabel">口座番号</label><input id="b_accNo" inputmode="numeric" /></div>
+      </div>
+      <div class="field"><label class="flabel">口座名義（カタカナ）</label><input id="b_accName" placeholder="例：タカハシショウゴ" /></div>
+      <div class="grid">
+        <div class="field"><label class="flabel">支払期限（請求日から何日後）</label><input id="b_dueDays" inputmode="numeric" /></div>
+      </div>
+      <div class="field"><label class="flabel">請求書の備考（任意・毎回表示されます）</label><textarea id="b_note" placeholder="例：お振込手数料は、お客様のご負担でお願いいたします。"></textarea></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="saveBizBtn">事業者情報を保存</button>
+      </div>
+    </div>
   </section>
+</div>
+
+
+<div id="invOverlay">
+  <div class="inv-toolbar inv-noprint">
+    <button type="button" class="btn btn-ghost" id="invCloseBtn">← 閉じる</button>
+    <button type="button" class="btn btn-primary" id="invPrintBtn" style="margin-left:auto;">🖨 印刷・PDF保存</button>
+  </div>
+  <div class="inv-panel inv-noprint">
+    <div class="card" style="margin-top:0;">
+      <div class="card-title">請求書の内容</div>
+      <div class="grid">
+        <div class="field"><label class="flabel">請求日</label><input type="date" id="inv_date" /></div>
+        <div class="field"><label class="flabel">支払期限</label><input type="date" id="inv_due" /></div>
+      </div>
+      <div class="grid">
+        <div class="field"><label class="flabel">宛名</label><input id="inv_recipient" /></div>
+        <div class="field"><label class="flabel">敬称</label><select id="inv_honorific"><option>様</option><option>御中</option></select></div>
+      </div>
+      <div class="field">
+        <label class="flabel">明細（内容と金額。値引きはマイナスの金額で入力）</label>
+        <div id="inv_items"></div>
+        <button type="button" class="btn btn-ghost" id="inv_addItem" style="font-size:12px; padding:6px 10px;">＋ 明細を追加</button>
+      </div>
+      <label style="display:flex; gap:8px; align-items:center; margin:6px 0; font-size:13px;"><input type="checkbox" id="inv_withReport" /> 作業報告書（2ページ目）を付ける</label>
+      <label style="display:flex; gap:8px; align-items:center; margin:6px 0; font-size:13px;"><input type="checkbox" id="inv_setStatus" /> 印刷したら、ステータスを「請求書提出済」にする</label>
+      <p class="note" id="inv_warn" style="color:var(--danger); display:none;">⚠ 事業者情報（住所・振込先など）が未入力です。「手数料設定」タブで入力してください。</p>
+    </div>
+    <p class="note">↓ プレビュー（印刷されるのはこの部分です）</p>
+  </div>
+  <div id="invZoomWrap"><div id="invPreview"></div></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -393,7 +515,8 @@ const PM = {
   bank:{label:"銀行振込", kind:"bank"},
   other:{label:"その他", kind:"direct"},
 };
-const DEFAULT_SETTINGS = { baseFeeRate:0.22, baseFeeMinimum:2200, cardFeeRate:0.04, atoFeeRate:0.045, atoFixedFee:500, transferFixedFee:275 };
+const DEFAULT_SETTINGS = { baseFeeRate:0.22, baseFeeMinimum:2200, cardFeeRate:0.04, atoFeeRate:0.045, atoFixedFee:500, transferFixedFee:275,
+  bizName:"", bizOwner:"", bizZip:"", bizAddress:"", bizPhone:"", bizBank:"", bizBranch:"", bizAccType:"普通", bizAccNo:"", bizAccName:"", bizDueDays:14, bizNote:"" };
 const LS_RECORDS = "kurume_receipts_v1";
 const LS_SETTINGS = "kurume_fee_settings_v1";
 
@@ -761,19 +884,19 @@ function addToCalendarFromForm(){
 /* ---------- customer index ---------- */
 function customerIndex(){
   const map = {};
-  for(const r of records){ if(r.customerName) map[r.customerName] = {area:r.area||"", phone:r.phone||""}; }
+  for(const r of records){ if(r.customerName) map[r.customerName] = {area:r.area||"", phone:r.phone||"", customerType:r.customerType||"個人"}; }
   return map;
 }
 
 /* ---------- form ---------- */
 const F = {
   receiptId:"receiptId", inquiryDate:"inquiryDate", inquiryChannel:"inquiryChannel",
-  customerName:"customerName", phone:"phone", area:"area", requestContent:"requestContent",
+  customerName:"customerName", phone:"phone", customerType:"customerType", propertyName:"propertyName", roomNo:"roomNo", area:"area", requestContent:"requestContent",
   desiredDate:"desiredDate", workDate:"workDate", workStartTime:"workStartTime", workEndTime:"workEndTime", status:"status",
   quoteAmount:"quoteAmount", discountAmount:"discountAmount", otherExpense:"otherExpense",
   paymentMethod:"paymentMethod", workHours:"workHours",
   reviewRequested:"reviewRequested", reviewResult:"reviewResult",
-  photoPermission:"photoPermission", repeatLikelihood:"repeatLikelihood", note:"note",
+  photoPermission:"photoPermission", repeatLikelihood:"repeatLikelihood", note:"note", workReport:"workReport",
 };
 
 function getFormValues(){
@@ -788,8 +911,14 @@ function setFormValues(v){
   for(const k in F){
     const el = document.getElementById(F[k]);
     if(el.type === "checkbox") el.checked = !!v[k];
+    else if(k === "customerType") el.value = v[k] || "個人";
     else el.value = v[k] != null ? v[k] : "";
   }
+  togglePropertyFields();
+}
+function togglePropertyFields(){
+  const t = document.getElementById("customerType").value;
+  document.getElementById("propertyFields").style.display = (t === "個人") ? "none" : "block";
 }
 function resetForm(){
   editingId = null;
@@ -799,15 +928,16 @@ function resetForm(){
   const inquiryDate = todayStr();
   setFormValues({
     receiptId: makeReceiptId(inquiryDate), inquiryDate, inquiryChannel:"くらしのマーケット",
-    customerName:"", phone:"", area:"", requestContent:"", desiredDate:"", workDate:"",
+    customerName:"", phone:"", customerType:"個人", propertyName:"", roomNo:"", area:"", requestContent:"", desiredDate:"", workDate:"",
     workStartTime:"", workEndTime:"",
     status:"受付", quoteAmount:"", discountAmount:"0", otherExpense:"0",
     paymentMethod:"kurashi_card", workHours:"", reviewRequested:false, reviewResult:"",
-    photoPermission:"", repeatLikelihood:"中", note:"",
+    photoPermission:"", repeatLikelihood:"中", note:"", workReport:"",
   });
   document.getElementById("repeatHint").style.display = "none";
   document.getElementById("reuseLastBtn").style.display = "none";
   document.getElementById("photoCard").style.display = "none";
+  document.getElementById("invoiceCard").style.display = "none";
   document.getElementById("photoHintNew").style.display = "block";
   updateComputed();
 }
@@ -841,7 +971,7 @@ function refreshCustomerList(){
 function statusPillClass(status){
   if(status==="キャンセル") return "pill-cancel";
   if(status==="確定") return "pill-confirmed";
-  if(status==="入金済" || status==="作業完了") return "pill-done";
+  if(status==="入金済" || status==="作業完了" || status==="請求書提出済") return "pill-done";
   return "pill-pending"; // 受付, 見積提示
 }
 
@@ -858,7 +988,7 @@ function renderList(){
   }
 
   const filtered = searchTerm
-    ? records.filter(r => (r.customerName||"").includes(searchTerm))
+    ? records.filter(r => (r.customerName||"").includes(searchTerm) || (r.propertyName||"").includes(searchTerm))
     : records;
 
   if(searchTerm){
@@ -888,13 +1018,13 @@ function renderList(){
     recent:   { statusFilter: null,      emptyMsg: "表示する受付データがありません。", title: "受付一覧（新しい順）" },
     upcoming: { statusFilter: "確定",     emptyMsg: "ステータスが「確定」の案件がありません。", title: "次の作業順（確定案件・作業日が近い順）" },
     quoting:  { statusFilter: "見積提示", emptyMsg: "ステータスが「見積提示」の案件がありません。", title: "見積回答待ち（問合せが古い順）" },
-    unpaid:   { statusFilter: "作業完了", emptyMsg: "ステータスが「作業完了」で未入金の案件がありません。", title: "未入金（作業完了・古い順）" },
+    unpaid:   { statusFilter: ["作業完了","請求書提出済"], emptyMsg: "未入金（作業完了・請求書提出済）の案件がありません。", title: "未入金（作業完了・請求書提出済・古い順）" },
   };
   const cfg = SORT_MODE_CONFIG[listSortMode] || SORT_MODE_CONFIG.recent;
 
   let listForDisplay = filtered;
   if(cfg.statusFilter){
-    listForDisplay = filtered.filter(r => r.status === cfg.statusFilter);
+    listForDisplay = filtered.filter(r => [].concat(cfg.statusFilter).includes(r.status));
   }
 
   document.getElementById("listTitle").textContent = cfg.title;
@@ -938,7 +1068,7 @@ function renderList(){
     const photoBadge = (r.photos && r.photos.length > 0) ? ' <span class="pill" style="background:var(--primarySoft);color:var(--primaryDark);">📷'+r.photos.length+'</span>' : '';
     html += '<tr class="kr-row" data-row="'+r._localId+'" style="cursor:pointer;">'+
       '<td>'+esc(r.inquiryDate)+'</td>'+
-      '<td>'+esc(r.customerName)+statusBadge+repeatBadge+photoBadge+'</td>'+
+      '<td>'+esc(r.customerName)+statusBadge+repeatBadge+photoBadge+(r.propertyName ? '<br><span class="note" style="margin:0;">🏢 '+esc(r.propertyName)+(r.roomNo ? ' '+esc(r.roomNo) : '')+'</span>' : '')+'</td>'+
       '<td>'+(r.phone ? '<a href="tel:'+esc(r.phone.replace(/[^0-9+]/g,""))+'" style="color:var(--primary); font-weight:600; text-decoration:none;">'+esc(r.phone)+'</a>' : '')+'</td>'+
       '<td style="max-width:220px;white-space:normal;">'+esc(r.requestContent||"")+'</td>'+
       '<td>'+workDateTime+'</td>'+
@@ -1027,6 +1157,8 @@ function editRecord(rec){
   updateComputed();
   document.getElementById("photoCard").style.display = "block";
   document.getElementById("photoHintNew").style.display = "none";
+  document.getElementById("invoiceCard").style.display = "block";
+  updateInvoiceInfo(rec);
   renderPhotoThumbs(rec);
   switchTab("input");
 }
@@ -1118,8 +1250,8 @@ function renderMonthly(){
     const avgHourly = sum.hours>0 ? Math.round(sum.netIncome/sum.hours) : 0;
     const label = key==="未設定" ? "作業日未設定" : key.replace("-","年")+"月";
 
-    // 未入金額（作業完了のまま入金済になっていない案件の合計）
-    const unpaidList = list.filter(r => r.status === "作業完了");
+    // 未入金額（作業完了／請求書提出済のまま入金済になっていない案件の合計）
+    const unpaidList = list.filter(r => r.status === "作業完了" || r.status === "請求書提出済");
     const unpaidAmount = unpaidList.reduce((a,r)=>a+(Number(r.netIncome)||0), 0);
 
     const newCountM = list.filter(r=>isNewMap[r._localId]).length;
@@ -1164,7 +1296,7 @@ function renderMonthly(){
         '<div class="citem net"><span class="k">実入金合計</span><span class="v">'+yen(sum.netIncome)+'</span></div>'+
         '<div class="citem"><span class="k">平均時給目安</span><span class="v">'+(avgHourly?yen(avgHourly)+"/h":"―")+'</span></div>'+
         '<div class="citem"><span class="k">月間手数料率</span><span class="v">'+feeRate+'%</span></div>'+
-        '<div class="citem"><span class="k">未入金額（作業完了・未回収）</span><span class="v" style="color:'+(unpaidAmount>0?'var(--danger)':'inherit')+';">'+(unpaidList.length?yen(unpaidAmount)+"（"+unpaidList.length+"件）":"¥0")+'</span></div>'+
+        '<div class="citem"><span class="k">未入金額（作業完了・請求書提出済・未回収）</span><span class="v" style="color:'+(unpaidAmount>0?'var(--danger)':'inherit')+';">'+(unpaidList.length?yen(unpaidAmount)+"（"+unpaidList.length+"件）":"¥0")+'</span></div>'+
       '</div>'+
       '<div class="computed" style="margin-top:8px;">'+
         '<div class="citem"><span class="k">新規 '+newCountM+'件 ／ リピート '+repeatCountM+'件</span><span class="v">リピート率 '+repeatRate+'%</span></div>'+
@@ -1190,16 +1322,27 @@ function renderSettings(){
   document.getElementById("s_atoFeeRate").value = Math.round(settings.atoFeeRate*1000)/10;
   document.getElementById("s_atoFixedFee").value = settings.atoFixedFee;
   document.getElementById("s_transferFixedFee").value = settings.transferFixedFee;
+  const bizMap = {b_name:"bizName", b_owner:"bizOwner", b_zip:"bizZip", b_phone:"bizPhone", b_address:"bizAddress", b_bank:"bizBank", b_branch:"bizBranch", b_accType:"bizAccType", b_accNo:"bizAccNo", b_accName:"bizAccName", b_dueDays:"bizDueDays", b_note:"bizNote"};
+  for(const id in bizMap){ document.getElementById(id).value = settings[bizMap[id]] != null ? settings[bizMap[id]] : ""; }
 }
+document.getElementById("saveBizBtn").addEventListener("click", ()=>{
+  const bizMap = {b_name:"bizName", b_owner:"bizOwner", b_zip:"bizZip", b_phone:"bizPhone", b_address:"bizAddress", b_bank:"bizBank", b_branch:"bizBranch", b_accType:"bizAccType", b_accNo:"bizAccNo", b_accName:"bizAccName", b_dueDays:"bizDueDays", b_note:"bizNote"};
+  const patch = {};
+  for(const id in bizMap){ patch[bizMap[id]] = document.getElementById(id).value.trim(); }
+  patch.bizDueDays = Number(patch.bizDueDays) || 14;
+  settings = Object.assign({}, settings, patch);
+  saveSettingsToStorage();
+  showToast("事業者情報を保存しました");
+});
 document.getElementById("saveSettingsBtn").addEventListener("click", ()=>{
-  settings = {
+  settings = Object.assign({}, settings, {
     baseFeeRate: (Number(document.getElementById("s_baseFeeRate").value)||0)/100,
     baseFeeMinimum: Number(document.getElementById("s_baseFeeMinimum").value)||0,
     cardFeeRate: (Number(document.getElementById("s_cardFeeRate").value)||0)/100,
     atoFeeRate: (Number(document.getElementById("s_atoFeeRate").value)||0)/100,
     atoFixedFee: Number(document.getElementById("s_atoFixedFee").value)||0,
     transferFixedFee: Number(document.getElementById("s_transferFixedFee").value)||0,
-  };
+  });
   saveSettingsToStorage();
   updateComputed();
   showToast("手数料設定を保存しました");
@@ -1224,6 +1367,10 @@ document.getElementById("customerName").addEventListener("input", (e)=>{
   if(match){
     if(!document.getElementById("area").value) document.getElementById("area").value = match.area;
     if(!document.getElementById("phone").value) document.getElementById("phone").value = match.phone;
+    if(document.getElementById("customerType").value === "個人" && match.customerType && match.customerType !== "個人"){
+      document.getElementById("customerType").value = match.customerType;
+      togglePropertyFields();
+    }
   }
   const hint = document.getElementById("repeatHint");
   const reuseBtn = document.getElementById("reuseLastBtn");
@@ -1239,6 +1386,8 @@ document.getElementById("customerName").addEventListener("input", (e)=>{
   }
 });
 
+document.getElementById("customerType").addEventListener("change", togglePropertyFields);
+
 document.getElementById("reuseLastBtn").addEventListener("click", ()=>{
   const name = document.getElementById("customerName").value.trim();
   if(!name) return;
@@ -1247,6 +1396,10 @@ document.getElementById("reuseLastBtn").addEventListener("click", ()=>{
   const last = past[0];
   document.getElementById("area").value = last.area || "";
   document.getElementById("phone").value = last.phone || "";
+  document.getElementById("customerType").value = last.customerType || "個人";
+  document.getElementById("propertyName").value = last.propertyName || "";
+  document.getElementById("roomNo").value = last.roomNo || "";
+  togglePropertyFields();
   document.getElementById("requestContent").value = last.requestContent || "";
   document.getElementById("paymentMethod").value = last.paymentMethod || "kurashi_card";
   document.getElementById("quoteAmount").value = last.quoteAmount || "";
@@ -1370,6 +1523,237 @@ document.getElementById("importFileInput").addEventListener("change", (e)=>{
   if(file) importDataFromFile(file);
   e.target.value = "";
 });
+
+
+/* ---------- 請求書・作業報告書 ---------- */
+let inv = null;
+
+function addDaysStr(dateStr, n){
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function fmtJpDate(str){
+  if(!str) return "";
+  const a = str.split("-");
+  return a[0]+"年"+Number(a[1])+"月"+Number(a[2])+"日";
+}
+function nextInvoiceNo(dateStr){
+  const ym = dateStr.slice(0,7).replace("-","");
+  const re = new RegExp("^"+ym+"-(\\d+)$");
+  let max = 0;
+  records.forEach(r=>{ const m = (r.invoiceNo||"").match(re); if(m) max = Math.max(max, Number(m[1])); });
+  return ym + "-" + String(max+1).padStart(3,"0");
+}
+function parseAmount(str){
+  const t = String(str||"").replace(/[,，\s¥￥円]/g,"").replace(/[−ー―]/g,"-");
+  return Number(t) || 0;
+}
+function defaultInvoiceItems(rec){
+  const first = (rec.requestContent || "作業料金").split("\n")[0].slice(0,60);
+  const items = [{desc:first, amount:Number(rec.quoteAmount)||0}];
+  const disc = Number(rec.discountAmount)||0;
+  if(disc>0) items.push({desc:"値引き", amount:-disc});
+  return items;
+}
+function updateInvoiceInfo(rec){
+  const el = document.getElementById("invoiceInfo");
+  if(!rec){ el.textContent = ""; return; }
+  el.textContent = rec.invoiceNo
+    ? "請求書番号 " + rec.invoiceNo + "（請求日 " + fmtJpDate(rec.invoiceDate) + "）"
+    : "請求書は、まだ発行していません。";
+}
+function commitCurrentForm(){
+  const f = getFormValues();
+  if(!f.customerName.trim()){ showToast("お客様名を入力してください"); return null; }
+  if(!f.quoteAmount){ showToast("見積提示額を入力してください"); return null; }
+  const fees = computeFees(f);
+  const existing = records.find(r=>r._localId===editingId);
+  if(!existing) return null;
+  const record = Object.assign({}, existing, f, fees, {_localId: editingId});
+  records = records.map(r=>r._localId===editingId ? record : r);
+  saveRecords();
+  return record;
+}
+function openInvoice(){
+  const rec = commitCurrentForm();
+  if(!rec) return;
+  const date = rec.invoiceDate || todayStr();
+  const dueDays = Number(settings.bizDueDays) || 14;
+  inv = {
+    id: rec._localId,
+    no: rec.invoiceNo || "",
+    date,
+    due: rec.invoiceDue || addDaysStr(date, dueDays),
+    dueTouched: !!rec.invoiceDue,
+    recipient: rec.invoiceRecipient || rec.customerName || "",
+    honorific: rec.invoiceHonorific || (rec.customerType === "管理会社" ? "御中" : "様"),
+    items: (rec.invoiceItems && rec.invoiceItems.length) ? rec.invoiceItems.map(x=>({desc:x.desc, amount:x.amount})) : defaultInvoiceItems(rec),
+    withReport: rec.invoiceWithReport != null ? rec.invoiceWithReport : (((rec.photos||[]).length > 0) || !!(rec.workReport||"").trim()),
+    setStatus: (rec.status === "作業完了" || rec.status === "確定"),
+  };
+  document.getElementById("inv_date").value = inv.date;
+  document.getElementById("inv_due").value = inv.due;
+  document.getElementById("inv_recipient").value = inv.recipient;
+  document.getElementById("inv_honorific").value = inv.honorific;
+  document.getElementById("inv_withReport").checked = inv.withReport;
+  document.getElementById("inv_setStatus").checked = inv.setStatus;
+  const missing = !settings.bizName || !settings.bizBank || !settings.bizAccNo;
+  document.getElementById("inv_warn").style.display = missing ? "block" : "none";
+  renderInvItems();
+  renderInvoicePreview();
+  document.getElementById("invOverlay").classList.add("show");
+  document.getElementById("invOverlay").scrollTop = 0;
+}
+function renderInvItems(){
+  const wrap = document.getElementById("inv_items");
+  wrap.innerHTML = inv.items.map((it,i)=>
+    '<div class="inv-itemrow">'+
+      '<input data-i="'+i+'" data-k="desc" value="'+esc(it.desc)+'" placeholder="内容" />'+
+      '<input data-i="'+i+'" data-k="amount" inputmode="numeric" value="'+esc(it.amount)+'" placeholder="金額" />'+
+      '<button type="button" class="linkbtn danger" data-delitem="'+i+'">✕</button>'+
+    '</div>'
+  ).join("");
+  wrap.querySelectorAll("input").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      const it = inv.items[Number(inp.dataset.i)];
+      if(inp.dataset.k === "desc") it.desc = inp.value; else it.amount = parseAmount(inp.value);
+      renderInvoicePreview();
+    });
+  });
+  wrap.querySelectorAll("[data-delitem]").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      inv.items.splice(Number(b.dataset.delitem), 1);
+      renderInvItems(); renderInvoicePreview();
+    });
+  });
+}
+function invoiceTotal(){ return inv.items.reduce((sum,x)=>sum+(Number(x.amount)||0), 0); }
+
+function invoicePageHtml(){
+  const b = settings;
+  const bankLines = (b.bizBank || b.bizAccNo)
+    ? esc(b.bizBank||"") + " " + esc(b.bizBranch||"") + "<br>" + esc(b.bizAccType||"普通") + " " + esc(b.bizAccNo||"") + "<br>口座名義：" + esc(b.bizAccName||"")
+    : "（未設定）";
+  const issuer =
+    '<div class="nm">'+esc(b.bizName||"")+'</div>'+
+    (b.bizOwner ? '<div>'+esc(b.bizOwner)+'</div>' : '')+
+    ((b.bizZip||b.bizAddress) ? '<div>'+(b.bizZip ? '〒'+esc(b.bizZip)+' ' : '')+esc(b.bizAddress||"")+'</div>' : '')+
+    (b.bizPhone ? '<div>TEL '+esc(b.bizPhone)+'</div>' : '');
+  const rows = inv.items.map(it=>
+    '<tr><td>'+esc(it.desc)+'</td><td class="amt">'+(Number(it.amount)<0 ? "-"+yen(-Number(it.amount)) : yen(it.amount))+'</td></tr>'
+  ).join("");
+  return '<div class="inv-page">'+
+    '<h1>請 求 書</h1>'+
+    '<div class="inv-head">'+
+      '<div><span class="inv-to">'+esc(inv.recipient)+' '+esc(inv.honorific)+'</span></div>'+
+      '<div class="inv-meta">請求書番号　'+(inv.no ? esc(inv.no) : '（印刷時に自動で付きます）')+'<br>請求日　'+esc(fmtJpDate(inv.date))+'</div>'+
+    '</div>'+
+    '<p style="margin:0;">下記のとおり、ご請求申し上げます。</p>'+
+    '<div class="inv-total"><span>ご請求金額</span><b>'+yen(invoiceTotal())+'</b></div>'+
+    '<table class="inv-table"><thead><tr><th>内容</th><th class="amt">金額</th></tr></thead><tbody>'+rows+
+      '<tr><td style="text-align:right; font-weight:600;">合計</td><td class="amt" style="font-weight:600;">'+yen(invoiceTotal())+'</td></tr></tbody></table>'+
+    '<div class="inv-box"><b>お支払期限</b>　'+esc(fmtJpDate(inv.due))+'</div>'+
+    '<div class="inv-box"><b>お振込先</b><br>'+bankLines+'</div>'+
+    (b.bizNote ? '<div class="inv-note">'+esc(b.bizNote)+'</div>' : '')+
+    '<div class="inv-issuer">'+issuer+'</div>'+
+  '</div>';
+}
+function reportPageHtml(rec){
+  const b = settings;
+  const place = [rec.propertyName, rec.roomNo].filter(Boolean).join(" ") || rec.area || "";
+  const addr = (rec.propertyName && rec.area) ? rec.area : "";
+  const time = rec.workDate
+    ? fmtJpDate(rec.workDate) + (rec.workStartTime ? "　" + rec.workStartTime + (rec.workEndTime ? "〜"+rec.workEndTime : "") : "")
+    : "";
+  const photos = (rec.photos||[]).map(p=>'<img data-photo-id="'+esc(p.fileId)+'" alt="作業写真" />').join("");
+  return '<div class="inv-page">'+
+    '<h1>作 業 報 告 書</h1>'+
+    '<div class="inv-head">'+
+      '<div><span class="inv-to">'+esc(inv.recipient)+' '+esc(inv.honorific)+'</span></div>'+
+      '<div class="inv-meta">報告日　'+esc(fmtJpDate(inv.date))+'</div>'+
+    '</div>'+
+    '<table class="inv-table"><tbody>'+
+      '<tr><th style="width:30mm;">作業日時</th><td>'+esc(time)+'</td></tr>'+
+      '<tr><th>作業場所</th><td>'+esc(place)+(addr ? '<br>'+esc(addr) : '')+'</td></tr>'+
+      '<tr><th>ご依頼内容</th><td style="white-space:pre-wrap;">'+esc(rec.requestContent||"")+'</td></tr>'+
+    '</tbody></table>'+
+    '<div style="font-weight:600; margin:10px 0 4px;">作業内容・所見</div>'+
+    '<div class="rep-comment">'+esc(rec.workReport||"")+'</div>'+
+    (photos ? '<div style="font-weight:600; margin:12px 0 0;">作業写真</div><div class="rep-photos">'+photos+'</div>' : '')+
+    '<div class="inv-issuer">'+esc(b.bizName||"")+(b.bizOwner ? '　'+esc(b.bizOwner) : '')+'</div>'+
+  '</div>';
+}
+function renderInvoicePreview(){
+  if(!inv) return;
+  const rec = records.find(r=>r._localId===inv.id) || {};
+  let html = invoicePageHtml();
+  if(inv.withReport) html += reportPageHtml(rec);
+  const box = document.getElementById("invPreview");
+  box.innerHTML = html;
+  box.querySelectorAll("img[data-photo-id]").forEach(loadPhotoInto);
+  const wrap = document.getElementById("invZoomWrap");
+  const pagePx = 794;
+  const avail = Math.max(window.innerWidth - 16, 280);
+  wrap.style.zoom = Math.min(1, avail / pagePx);
+}
+function persistInvoice(){
+  const rec = records.find(r=>r._localId===inv.id);
+  if(!rec) return null;
+  rec.invoiceNo = inv.no || rec.invoiceNo || "";
+  rec.invoiceDate = inv.date;
+  rec.invoiceDue = inv.due;
+  rec.invoiceRecipient = inv.recipient;
+  rec.invoiceHonorific = inv.honorific;
+  rec.invoiceItems = inv.items.map(x=>({desc:x.desc, amount:x.amount}));
+  rec.invoiceWithReport = inv.withReport;
+  saveRecords();
+  updateInvoiceInfo(rec.invoiceNo ? rec : null);
+  return rec;
+}
+async function printInvoice(){
+  if(!inv) return;
+  if(inv.items.length === 0){ showToast("明細を1行以上入力してください"); return; }
+  if(!settings.bizBank || !settings.bizAccNo){
+    if(!confirm("振込先が未入力です。このまま印刷しますか？")) return;
+  }
+  if(!inv.no) inv.no = nextInvoiceNo(inv.date);
+  const rec = persistInvoice();
+  if(rec && inv.setStatus && (rec.status === "作業完了" || rec.status === "確定")){
+    rec.status = "請求書提出済";
+    saveRecords();
+    const st = document.getElementById("status");
+    if(st) st.value = "請求書提出済";
+    renderList();
+  }
+  renderInvoicePreview();
+  const imgs = Array.from(document.querySelectorAll("#invPreview img[data-photo-id]"));
+  await Promise.all(imgs.map(img => loadPhotoInto(img).then(()=>img.decode ? img.decode().catch(()=>{}) : null)));
+  window.print();
+}
+function closeInvoice(){
+  if(inv) persistInvoice();
+  document.getElementById("invOverlay").classList.remove("show");
+  document.getElementById("invPreview").innerHTML = "";
+  inv = null;
+}
+document.getElementById("openInvoiceBtn").addEventListener("click", openInvoice);
+document.getElementById("invCloseBtn").addEventListener("click", closeInvoice);
+document.getElementById("invPrintBtn").addEventListener("click", printInvoice);
+document.getElementById("inv_date").addEventListener("input", (e)=>{
+  inv.date = e.target.value || inv.date;
+  if(!inv.dueTouched){
+    inv.due = addDaysStr(inv.date, Number(settings.bizDueDays) || 14);
+    document.getElementById("inv_due").value = inv.due;
+  }
+  renderInvoicePreview();
+});
+document.getElementById("inv_due").addEventListener("input", (e)=>{ inv.due = e.target.value || inv.due; inv.dueTouched = true; renderInvoicePreview(); });
+document.getElementById("inv_recipient").addEventListener("input", (e)=>{ inv.recipient = e.target.value; renderInvoicePreview(); });
+document.getElementById("inv_honorific").addEventListener("change", (e)=>{ inv.honorific = e.target.value; renderInvoicePreview(); });
+document.getElementById("inv_withReport").addEventListener("change", (e)=>{ inv.withReport = e.target.checked; renderInvoicePreview(); });
+document.getElementById("inv_setStatus").addEventListener("change", (e)=>{ inv.setStatus = e.target.checked; });
+document.getElementById("inv_addItem").addEventListener("click", ()=>{ inv.items.push({desc:"", amount:0}); renderInvItems(); renderInvoicePreview(); });
 
 /* ---------- init ---------- */
 document.getElementById("tokenChangeBtn").addEventListener("click", async (e)=>{
