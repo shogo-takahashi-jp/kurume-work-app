@@ -510,6 +510,22 @@ async function uploadPhotosForCurrentRecord(fileList){
   renderList();
 }
 
+const photoCache = {};
+async function loadPhotoInto(img){
+  const id = img.getAttribute("data-photo-id");
+  if(photoCache[id]){ img.src = photoCache[id]; return; }
+  try {
+    const res = await fetch(photoUrl(id));
+    const data = await res.json();
+    if(data.error || !data.data){ throw new Error(data.error || "no data"); }
+    const url = "data:" + (data.mimeType || "image/jpeg") + ";base64," + data.data;
+    photoCache[id] = url;
+    img.src = url;
+  } catch(err){
+    img.alt = "読み込み失敗";
+  }
+}
+
 function renderPhotoThumbs(rec){
   const wrap = document.getElementById("photoThumbs");
   const photos = (rec && rec.photos) || [];
@@ -519,10 +535,11 @@ function renderPhotoThumbs(rec){
   }
   wrap.innerHTML = photos.map((p, idx) =>
     '<div style="position:relative;">' +
-      '<img src="'+photoUrl(p.fileId)+'" alt="現場写真" style="width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--border);" />' +
+      '<img data-photo-id="'+p.fileId+'" alt="現場写真" style="width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--border); background:#eee;" />' +
       '<button type="button" class="linkbtn danger" data-photo-del="'+idx+'" style="position:absolute; top:-6px; right:-6px; background:white; border-radius:999px; padding:2px 6px; box-shadow:0 1px 4px rgba(0,0,0,0.2);">✕</button>' +
     '</div>'
   ).join("");
+  wrap.querySelectorAll("img[data-photo-id]").forEach(loadPhotoInto);
   wrap.querySelectorAll("[data-photo-del]").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
       if(!confirm("この写真を削除しますか？")) return;
