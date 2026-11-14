@@ -1575,6 +1575,15 @@ function commitCurrentForm(){
   saveRecords();
   return record;
 }
+function fmtPhone(s){
+  s = String(s||"");
+  if(/[-ー−]/.test(s)) return s;
+  const d = s.replace(/\D/g,"");
+  if(/^0[789]0\d{8}$/.test(d) || /^0120\d{6}$/.test(d)) return d.slice(0,3)+"-"+d.slice(3,7)+"-"+d.slice(7);
+  if(/^(03|06)\d{8}$/.test(d)) return d.slice(0,2)+"-"+d.slice(2,6)+"-"+d.slice(6);
+  if(/^0\d{9}$/.test(d)) return d.slice(0,3)+"-"+d.slice(3,6)+"-"+d.slice(6);
+  return s;
+}
 function openInvoice(){
   const rec = commitCurrentForm();
   if(!rec) return;
@@ -1639,7 +1648,7 @@ function invoicePageHtml(){
     '<div class="nm">'+esc(b.bizName||"")+'</div>'+
     (b.bizOwner ? '<div>'+esc(b.bizOwner)+'</div>' : '')+
     ((b.bizZip||b.bizAddress) ? '<div>'+(b.bizZip ? '〒'+esc(b.bizZip)+' ' : '')+esc(b.bizAddress||"")+'</div>' : '')+
-    (b.bizPhone ? '<div>TEL '+esc(b.bizPhone)+'</div>' : '');
+    (b.bizPhone ? '<div>TEL '+esc(fmtPhone(b.bizPhone))+'</div>' : '');
   const rows = inv.items.map(it=>
     '<tr><td>'+esc(it.desc)+'</td><td class="amt">'+(Number(it.amount)<0 ? "-"+yen(-Number(it.amount)) : yen(it.amount))+'</td></tr>'
   ).join("");
