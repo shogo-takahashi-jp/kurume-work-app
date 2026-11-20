@@ -98,6 +98,18 @@
   section{display:none;}
   section.active{display:block;}
 
+  /* ---- 料金表 ---- */
+  .pl-bar{display:flex; justify-content:space-between; align-items:center; gap:8px; background:var(--primarySoft); border-radius:10px; padding:10px 12px; margin-bottom:10px; font-size:13px; font-weight:700; color:var(--primaryDark);}
+  .pl-row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:11px 4px; border-top:1px solid var(--border); cursor:pointer;}
+  .pl-row:first-of-type{border-top:none;}
+  .pl-row:active{background:#EFF3EC;}
+  .pl-name{font-size:14px; flex:1; min-width:0;}
+  .pl-price{font-weight:800; white-space:nowrap; font-variant-numeric:tabular-nums; color:var(--primaryDark); font-size:14px;}
+  .pl-edit{display:flex; gap:6px; align-items:center; padding:5px 0; border-top:1px solid var(--border);}
+  .pl-edit input.n{flex:1; min-width:0;}
+  .pl-edit input.p{width:110px; flex:none;}
+  .pl-terms{white-space:pre-wrap; font-size:12.5px; line-height:1.8;}
+
   /* ---- 請求書・作業報告書 ---- */
   #invOverlay{position:fixed; inset:0; background:#e4e7e1; z-index:100; overflow:auto; display:none; -webkit-overflow-scrolling:touch;}
   #invOverlay.show{display:block;}
@@ -151,6 +163,7 @@
     <button class="tab active" data-tab="input">入力</button>
     <button class="tab" data-tab="list">一覧（<span id="countBadge">0</span>）</button>
     <button class="tab" data-tab="monthly">月次集計</button>
+    <button class="tab" data-tab="prices">料金表</button>
     <button class="tab" data-tab="settings">手数料設定</button>
   </div>
 
@@ -393,6 +406,21 @@
   <!-- 月次集計タブ -->
   <section id="tab-monthly">
     <div id="monthlyWrap"></div>
+  </section>
+
+  <!-- 料金表タブ -->
+  <section id="tab-prices">
+    <div class="card">
+      <div class="card-title">不動産管理・賃貸物件サポート 料金表</div>
+      <div class="note" id="plMeta" style="margin-bottom:10px;"></div>
+      <div id="plQuoteBar" class="pl-bar"></div>
+      <div id="plSearchWrap"><input id="plSearch" type="search" placeholder="🔍 項目を検索（例：シャワー、ドア、清掃）" /></div>
+      <div class="actions" style="justify-content:space-between; margin-top:10px;">
+        <span class="note" id="plHint">項目をタップすると、入力画面の「依頼内容」に追加され、見積金額に加算されます。</span>
+        <button class="btn btn-ghost" id="plEditBtn" type="button">✏️ 編集</button>
+      </div>
+    </div>
+    <div id="plBody"></div>
   </section>
 
   <!-- 設定タブ -->
@@ -1355,6 +1383,7 @@ function switchTab(name){
   if(name==="list") renderList();
   if(name==="monthly") renderMonthly();
   if(name==="settings") renderSettings();
+  if(name==="prices") renderPrices();
 }
 document.querySelectorAll(".tab").forEach(t=>{
   t.addEventListener("click", ()=>switchTab(t.dataset.tab));
@@ -1763,6 +1792,132 @@ document.getElementById("inv_honorific").addEventListener("change", (e)=>{ inv.h
 document.getElementById("inv_withReport").addEventListener("change", (e)=>{ inv.withReport = e.target.checked; renderInvoicePreview(); });
 document.getElementById("inv_setStatus").addEventListener("change", (e)=>{ inv.setStatus = e.target.checked; });
 document.getElementById("inv_addItem").addEventListener("click", ()=>{ inv.items.push({desc:"", amount:0}); renderInvItems(); renderInvoicePreview(); });
+
+/* ---------- 料金表 ---------- */
+const DEFAULT_PRICELIST = {
+  updated:"2026.11.20", ver:"Ver.1.0（暫定価格）",
+  groups:[
+    {t:"01 基本料金・現地対応", items:[
+      ["基本訪問・軽作業（60分以内）","6,600円"],["延長30分","2,200円"],["延長60分","4,400円"],["軽作業2時間パック","11,000円"],
+      ["現地調査のみ（30分以内）","4,400円"],["空室巡回・写真報告","5,500円〜"],["入退去時の現地確認補助","6,600円〜"],["写真付き作業報告書","無料"]]},
+    {t:"02 水回り・住宅設備", items:[
+      ["シャワーホース交換","5,500円〜"],["シャワーヘッド交換","5,500円〜"],["シャワーホース・ヘッドセット交換","6,600円〜"],
+      ["水栓パッキン交換","5,500円〜"],["蛇口先端部品交換","5,500円〜"],["排水トラップ清掃","6,600円〜"],["排水口の簡易詰まり除去","6,600円〜"],
+      ["普通便座交換","6,600円〜"],["トイレタンク内の簡易部品交換","6,600円〜"]]},
+    {t:"03 建具・室内小修繕", items:[
+      ["ドアの建付け調整","6,600円〜"],["丁番調整・交換","6,600円〜"],["ドアノブ交換","6,600円〜"],["戸当たり交換","5,500円〜"],
+      ["カーテンレール交換","6,600円〜"],["網戸張替（一般サイズ・1枚）","4,400円〜"],["室内の簡易補修","6,600円〜"],
+      ["棚板・金具の取付け","6,600円〜"],["家具の移動・組立","6,600円〜"]]},
+    {t:"04 入退去・空室管理・共用部", items:[
+      ["入居前の簡易点検・写真報告","5,500円〜"],["退去後の室内状況確認","5,500円〜"],["残置物の整理・移動（60分以内）","6,600円〜"],
+      ["室内の簡易清掃（60分以内）","6,600円〜"],["共用部の簡易清掃（60分以内）","6,600円〜"],["共用部の電球交換","5,500円〜"],
+      ["宅配ボックス・ポストの簡易調整","6,600円〜"],["掲示物交換・掲示板整理","5,500円〜"],["敷地内の簡易除草（60分以内）","6,600円〜"],
+      ["定期巡回・複数物件管理","個別見積もり"]]},
+    {t:"05 出張費（拠点から片道距離の目安）", pre:"出張費：", items:[
+      ["10km以内","無料"],["10km超〜20km","2,200円"],["20km超〜40km","4,400円"],["40km超〜60km","6,600円"],["60km超","個別見積もり"]]},
+    {t:"06 時間外・緊急対応の加算", pre:"加算：", items:[
+      ["通常営業時間内","加算なし"],["当日の優先対応","＋3,300円"],["18:00〜22:00","＋3,300円"],["22:00〜翌8:00","＋6,600円"],["日曜・祝日","原則加算なし"]]}
+  ],
+  terms:"・作業別料金は基本訪問料込みの最低料金（基本料金との二重請求なし）。\n・部材・材料、有料駐車場・高速道路、処分等は別途。追加作業は事前承認。\n・同一物件での複数作業は一括見積もり可。遠方は移動時間も踏まえ個別見積もり。\n・法人の支払い条件は月末締め翌月末払いを基本案として個別協議。\n・夜間・当日対応は対応可能な場合のみ。24時間対応は保証しない。\n・電気工事等の資格が必要な作業、無許可の廃棄物収集運搬等は対象外。\n・インボイス未登録。表示額は請求総額の目安。正式受注前に条件確定。"
+};
+let plEditing = false, plWork = null;
+function getPL(){ return (settings.priceList && settings.priceList.groups) ? settings.priceList : DEFAULT_PRICELIST; }
+function plParse(p){
+  const m = String(p||"").match(/^[＋+]?\s*([\d,，]+)\s*円/);
+  if(m) return Number(m[1].replace(/[,，]/g,""))||0;
+  if(/^無料/.test(String(p||"").trim())) return 0;
+  return null;
+}
+function plQuoteBar(){
+  const q = Number(document.getElementById("quoteAmount").value)||0;
+  document.getElementById("plQuoteBar").innerHTML =
+    '<span>入力中の見積金額　'+yen(q)+'</span><button class="btn btn-primary" type="button" id="plBackBtn" style="padding:7px 12px; font-size:12.5px;">入力に戻る</button>';
+  document.getElementById("plBackBtn").addEventListener("click", ()=>{ switchTab("input"); window.scrollTo(0,0); });
+}
+function renderPrices(){
+  const pl = plEditing ? plWork : getPL();
+  document.getElementById("plMeta").textContent = "最終更新 "+pl.updated+"　／　"+pl.ver+"　／　正式提示前に条件・金額を確認";
+  document.getElementById("plEditBtn").textContent = plEditing ? "💾 保存して終了" : "✏️ 編集";
+  document.getElementById("plSearchWrap").style.display = plEditing ? "none" : "";
+  document.getElementById("plHint").textContent = plEditing
+    ? "名前と金額の文字を直せます（例：6,600円〜）。行の ✕ で削除、各グループ下で追加。"
+    : "項目をタップすると、入力画面の「依頼内容」に追加され、見積金額に加算されます。";
+  plQuoteBar();
+  const q = (document.getElementById("plSearch").value||"").trim();
+  let html = "";
+  pl.groups.forEach((g,gi)=>{
+    if(plEditing){
+      html += '<div class="card"><input class="pl-gt" data-g="'+gi+'" value="'+esc(g.t)+'" style="font-weight:700; margin-bottom:6px;" />';
+      g.items.forEach((it,ii)=>{
+        html += '<div class="pl-edit"><input class="n" data-g="'+gi+'" data-i="'+ii+'" data-k="0" value="'+esc(it[0])+'" /><input class="p" data-g="'+gi+'" data-i="'+ii+'" data-k="1" value="'+esc(it[1])+'" />'+
+                '<button class="linkbtn danger pl-del" type="button" data-g="'+gi+'" data-i="'+ii+'">✕</button></div>';
+      });
+      html += '<div class="actions" style="justify-content:flex-start; margin-top:6px;"><button class="btn btn-ghost pl-add" type="button" data-g="'+gi+'">＋ 項目を追加</button></div></div>';
+    } else {
+      const rows = g.items.map((it,ii)=>({it,ii})).filter(o=>!q || (o.it[0]+" "+g.t).indexOf(q)>=0);
+      if(!rows.length) return;
+      html += '<div class="card"><div class="card-title">'+esc(g.t)+'</div>';
+      rows.forEach(o=>{
+        html += '<div class="pl-row" data-g="'+gi+'" data-i="'+o.ii+'"><div class="pl-name">'+esc(o.it[0])+'</div><div class="pl-price">'+esc(o.it[1])+'</div></div>';
+      });
+      html += '</div>';
+    }
+  });
+  if(!html) html = '<div class="card"><div class="empty">見つかりませんでした</div></div>';
+  if(plEditing){
+    html += '<div class="card"><div class="card-title">共通条件</div><textarea id="plTerms" rows="9">'+esc(pl.terms||"")+'</textarea></div>'+
+      '<div class="actions"><button class="btn btn-ghost" id="plResetBtn" type="button">標準の料金表に戻す</button><button class="btn btn-ghost" id="plCancelBtn" type="button">キャンセル</button></div>';
+  } else if(!q){
+    html += '<div class="card"><div class="card-title">見積もり・受注時の共通条件</div><div class="pl-terms">'+esc(pl.terms||"")+'</div></div>';
+  }
+  document.getElementById("plBody").innerHTML = html;
+}
+function plApply(gi, ii){
+  const pl = getPL(), g = pl.groups[gi], it = g.items[ii];
+  const reqEl = document.getElementById("requestContent");
+  const line = (g.pre||"") + it[0];
+  if(reqEl.value.indexOf(line)<0) reqEl.value = reqEl.value.trim() ? reqEl.value.replace(/\s+$/,"")+"\n"+line : line;
+  const amt = plParse(it[1]);
+  const qEl = document.getElementById("quoteAmount");
+  let msg;
+  if(amt===null){
+    msg = "「"+it[0]+"」を追加しました（金額は個別に入力）";
+  } else {
+    qEl.value = String((Number(qEl.value)||0)+amt);
+    msg = "＋"+yen(amt)+" → 見積金額 "+yen(qEl.value)+(/〜/.test(it[1])?"（〜は最低額）":"");
+  }
+  qEl.dispatchEvent(new Event("input",{bubbles:true}));
+  reqEl.dispatchEvent(new Event("input",{bubbles:true}));
+  showToast(msg); plQuoteBar();
+}
+document.getElementById("plSearch").addEventListener("input", renderPrices);
+document.getElementById("plEditBtn").addEventListener("click", ()=>{
+  if(!plEditing){ plWork = JSON.parse(JSON.stringify(getPL())); plEditing = true; renderPrices(); window.scrollTo(0,0); return; }
+  const t = document.getElementById("plTerms"); if(t) plWork.terms = t.value;
+  const d = new Date();
+  plWork.updated = d.getFullYear()+"."+String(d.getMonth()+1).padStart(2,"0")+"."+String(d.getDate()).padStart(2,"0");
+  plWork.groups.forEach(g=>{ g.items = g.items.filter(it=>String(it[0]).trim()); });
+  settings = Object.assign({}, settings, {priceList: plWork});
+  saveSettingsToStorage(); plEditing = false; plWork = null; renderPrices(); showToast("料金表を保存しました");
+});
+document.getElementById("plBody").addEventListener("input", (e)=>{
+  if(!plEditing) return;
+  const el = e.target, g = el.dataset.g;
+  if(el.classList.contains("pl-gt")) plWork.groups[g].t = el.value;
+  else if(el.dataset.k!==undefined) plWork.groups[g].items[el.dataset.i][el.dataset.k] = el.value;
+});
+document.getElementById("plBody").addEventListener("click", (e)=>{
+  const t = e.target;
+  if(plEditing){
+    if(t.classList.contains("pl-del")){ plWork.groups[t.dataset.g].items.splice(Number(t.dataset.i),1); renderPrices(); }
+    else if(t.classList.contains("pl-add")){ plWork.groups[t.dataset.g].items.push(["",""]); renderPrices(); }
+    else if(t.id==="plResetBtn"){ if(confirm("標準の料金表（2026.11.20版）に戻します。よろしいですか？")){ plWork = JSON.parse(JSON.stringify(DEFAULT_PRICELIST)); renderPrices(); } }
+    else if(t.id==="plCancelBtn"){ plEditing=false; plWork=null; renderPrices(); }
+    return;
+  }
+  const row = t.closest(".pl-row");
+  if(row) plApply(Number(row.dataset.g), Number(row.dataset.i));
+});
 
 /* ---------- init ---------- */
 document.getElementById("tokenChangeBtn").addEventListener("click", async (e)=>{
