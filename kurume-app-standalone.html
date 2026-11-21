@@ -91,7 +91,7 @@
   .toast{
     position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
     background:var(--primaryDark); color:#fff; padding:9px 18px; border-radius:999px;
-    font-size:13px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,0.18); z-index:50;
+    font-size:13px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,0.18); z-index:300;
     opacity:0; pointer-events:none; transition:opacity .2s;
   }
   .toast.show{opacity:1;}
@@ -137,7 +137,12 @@
   .inv-issuer .nm{font-size:16px; font-weight:600;}
   .inv-note{margin-top:12px; font-size:12px; white-space:pre-wrap;}
   .rep-photos{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;}
-  .rep-photos img{width:100%; max-height:78mm; object-fit:contain; background:#f4f4f2; border:1px solid #ccc;}
+  .rep-ph{position:relative; width:100%; aspect-ratio:4/3; background:#f4f4f2; border:1px solid #ccc; box-sizing:border-box; overflow:hidden; break-inside:avoid; page-break-inside:avoid;}
+  .rep-ph img{position:absolute; inset:0; width:100%; height:100%; object-fit:contain;}
+  .rep-board{position:absolute; left:6px; bottom:6px; width:48%; background:#fff; border:1.5px solid #222; color:#111; font-size:7.5pt; line-height:1.4; padding:2px 5px 3px; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  .rep-board .rb-phase{font-size:10pt; font-weight:800; text-align:center; border-bottom:1px solid #222; margin-bottom:2px; letter-spacing:.2em;}
+  .rep-board .rb-row{display:flex; gap:4px; overflow-wrap:anywhere;}
+  .rep-board .rb-row span{flex:none; width:3.2em; font-weight:700;}
   .rep-comment{white-space:pre-wrap; border:1px solid #888; padding:8px 12px; min-height:30mm;}
   @media print{
     @page{size:A4; margin:12mm;}
@@ -522,6 +527,7 @@
         <button type="button" class="btn btn-ghost" id="inv_addItem" style="font-size:12px; padding:6px 10px;">＋ 明細を追加</button>
       </div>
       <label style="display:flex; gap:8px; align-items:center; margin:6px 0; font-size:13px;"><input type="checkbox" id="inv_withReport" /> 作業報告書（2ページ目）を付ける</label>
+      <label style="display:flex; gap:8px; align-items:center; margin:6px 0; font-size:13px;"><input type="checkbox" id="inv_withBoard" /> 報告書の写真に黒板（白板）を付ける（作業日・内容・施工前／中／後）</label>
       <label style="display:flex; gap:8px; align-items:center; margin:6px 0; font-size:13px;"><input type="checkbox" id="inv_setStatus" /> 印刷したら、ステータスを「請求書提出済」にする</label>
       <p class="note" id="inv_warn" style="color:var(--danger); display:none;">⚠ 事業者情報（住所・振込先など）が未入力です。「手数料設定」タブで入力してください。</p>
     </div>
@@ -716,12 +722,23 @@ function renderPhotoThumbs(rec){
     return;
   }
   wrap.innerHTML = photos.map((p, idx) =>
-    '<div style="position:relative;">' +
+    '<div style="position:relative; width:84px;">' +
       '<img data-photo-id="'+p.fileId+'" alt="現場写真" style="width:84px; height:84px; object-fit:cover; border-radius:8px; border:1px solid var(--border); background:#eee;" />' +
       '<button type="button" class="linkbtn danger" data-photo-del="'+idx+'" style="position:absolute; top:-6px; right:-6px; background:white; border-radius:999px; padding:2px 6px; box-shadow:0 1px 4px rgba(0,0,0,0.2);">✕</button>' +
+      '<select data-photo-phase="'+idx+'" style="margin-top:4px; padding:3px 2px; font-size:12px;">' +
+        ['', '施工前','施工中','施工後'].map(v=>'<option value="'+v+'"'+((p.phase||"")===v?' selected':'')+'>'+(v||'区分なし')+'</option>').join("") +
+      '</select>' +
     '</div>'
   ).join("");
   wrap.querySelectorAll("img[data-photo-id]").forEach(loadPhotoInto);
+  wrap.querySelectorAll("[data-photo-phase]").forEach(sel=>{
+    sel.addEventListener("change", async ()=>{
+      const rec2 = records.find(r=>r._localId===editingId);
+      if(!rec2 || !rec2.photos) return;
+      const ph = rec2.photos[Number(sel.dataset.photoPhase)];
+      if(ph){ ph.phase = sel.value; await saveRecords(); showToast("区分を保存しました"); }
+    });
+  });
   wrap.querySelectorAll("[data-photo-del]").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
       if(!confirm("この写真を削除しますか？")) return;
@@ -1628,6 +1645,7 @@ function openInvoice(){
     honorific: rec.invoiceHonorific || (rec.customerType === "管理会社" ? "御中" : "様"),
     items: (rec.invoiceItems && rec.invoiceItems.length) ? rec.invoiceItems.map(x=>({desc:x.desc, amount:x.amount})) : defaultInvoiceItems(rec),
     withReport: rec.invoiceWithReport != null ? rec.invoiceWithReport : (((rec.photos||[]).length > 0) || !!(rec.workReport||"").trim()),
+    withBoard: rec.invoiceWithBoard != null ? rec.invoiceWithBoard : true,
     setStatus: (rec.status === "作業完了" || rec.status === "確定"),
   };
   document.getElementById("inv_date").value = inv.date;
@@ -1635,6 +1653,7 @@ function openInvoice(){
   document.getElementById("inv_recipient").value = inv.recipient;
   document.getElementById("inv_honorific").value = inv.honorific;
   document.getElementById("inv_withReport").checked = inv.withReport;
+  document.getElementById("inv_withBoard").checked = inv.withBoard;
   document.getElementById("inv_setStatus").checked = inv.setStatus;
   const missing = !settings.bizName || !settings.bizBank || !settings.bizAccNo;
   document.getElementById("inv_warn").style.display = missing ? "block" : "none";
@@ -1704,7 +1723,26 @@ function reportPageHtml(rec){
   const time = rec.workDate
     ? fmtJpDate(rec.workDate) + (rec.workStartTime ? "　" + rec.workStartTime + (rec.workEndTime ? "〜"+rec.workEndTime : "") : "")
     : "";
-  const photos = (rec.photos||[]).map(p=>'<img data-photo-id="'+esc(p.fileId)+'" alt="作業写真" />').join("");
+  let plist = (rec.photos||[]).slice();
+  if(plist.some(p=>p.phase)){
+    const ord = {"施工前":0,"施工中":1,"施工後":2};
+    plist = plist.map((p,i)=>({p,i})).sort((a,b)=>((ord[a.p.phase]!=null?ord[a.p.phase]:3)-(ord[b.p.phase]!=null?ord[b.p.phase]:3)) || (a.i-b.i)).map(o=>o.p);
+  }
+  const bWork = String(rec.requestContent||"").split(/\n/)[0].trim();
+  const bDate = rec.workDate ? rec.workDate.replace(/-/g,"/") : "";
+  const bPlace = [rec.propertyName, rec.roomNo].filter(Boolean).join(" ");
+  const photos = plist.map(p=>{
+    let board = "";
+    if(inv.withBoard){
+      board = '<div class="rep-board">'+
+        (p.phase ? '<div class="rb-phase">'+esc(p.phase)+'</div>' : '')+
+        (bDate ? '<div class="rb-row"><span>作業日</span><div>'+esc(bDate)+'</div></div>' : '')+
+        (bWork ? '<div class="rb-row"><span>内容</span><div>'+esc(bWork)+'</div></div>' : '')+
+        (bPlace ? '<div class="rb-row"><span>場所</span><div>'+esc(bPlace)+'</div></div>' : '')+
+      '</div>';
+    }
+    return '<div class="rep-ph"><img data-photo-id="'+esc(p.fileId)+'" alt="作業写真" />'+board+'</div>';
+  }).join("");
   return '<div class="inv-page">'+
     '<h1>作 業 報 告 書</h1>'+
     '<div class="inv-head">'+
@@ -1745,29 +1783,38 @@ function persistInvoice(){
   rec.invoiceHonorific = inv.honorific;
   rec.invoiceItems = inv.items.map(x=>({desc:x.desc, amount:x.amount}));
   rec.invoiceWithReport = inv.withReport;
+  rec.invoiceWithBoard = inv.withBoard;
   saveRecords();
   updateInvoiceInfo(rec.invoiceNo ? rec : null);
   return rec;
 }
 async function printInvoice(){
   if(!inv) return;
-  if(inv.items.length === 0){ showToast("明細を1行以上入力してください"); return; }
-  if(!settings.bizBank || !settings.bizAccNo){
-    if(!confirm("振込先が未入力です。このまま印刷しますか？")) return;
+  try{
+    if(inv.items.length === 0){ showToast("明細を1行以上入力してください"); return; }
+    if(!settings.bizBank || !settings.bizAccNo){
+      if(!confirm("振込先が未入力です。このまま印刷しますか？")) return;
+    }
+    showToast("印刷の準備中…（写真を読み込んでいます）");
+    if(!inv.no) inv.no = nextInvoiceNo(inv.date);
+    const rec = persistInvoice();
+    if(rec && inv.setStatus && (rec.status === "作業完了" || rec.status === "確定")){
+      rec.status = "請求書提出済";
+      saveRecords();
+      const st = document.getElementById("status");
+      if(st) st.value = "請求書提出済";
+      renderList();
+    }
+    renderInvoicePreview();
+    const imgs = Array.from(document.querySelectorAll("#invPreview img[data-photo-id]"));
+    const wait = Promise.all(imgs.map(img => loadPhotoInto(img).then(()=>img.decode ? img.decode().catch(()=>{}) : null).catch(()=>{})));
+    const timeout = new Promise(res => setTimeout(res, 10000));
+    await Promise.race([wait, timeout]);
+    window.print();
+  }catch(err){
+    showToast("印刷できませんでした: " + (err && err.message ? err.message : err));
+    try{ alert("印刷できませんでした: " + (err && err.message ? err.message : err)); }catch(e){}
   }
-  if(!inv.no) inv.no = nextInvoiceNo(inv.date);
-  const rec = persistInvoice();
-  if(rec && inv.setStatus && (rec.status === "作業完了" || rec.status === "確定")){
-    rec.status = "請求書提出済";
-    saveRecords();
-    const st = document.getElementById("status");
-    if(st) st.value = "請求書提出済";
-    renderList();
-  }
-  renderInvoicePreview();
-  const imgs = Array.from(document.querySelectorAll("#invPreview img[data-photo-id]"));
-  await Promise.all(imgs.map(img => loadPhotoInto(img).then(()=>img.decode ? img.decode().catch(()=>{}) : null)));
-  window.print();
 }
 function closeInvoice(){
   if(inv) persistInvoice();
@@ -1789,6 +1836,7 @@ document.getElementById("inv_date").addEventListener("input", (e)=>{
 document.getElementById("inv_due").addEventListener("input", (e)=>{ inv.due = e.target.value || inv.due; inv.dueTouched = true; renderInvoicePreview(); });
 document.getElementById("inv_recipient").addEventListener("input", (e)=>{ inv.recipient = e.target.value; renderInvoicePreview(); });
 document.getElementById("inv_honorific").addEventListener("change", (e)=>{ inv.honorific = e.target.value; renderInvoicePreview(); });
+document.getElementById("inv_withBoard").addEventListener("change", (e)=>{ inv.withBoard = e.target.checked; renderInvoicePreview(); });
 document.getElementById("inv_withReport").addEventListener("change", (e)=>{ inv.withReport = e.target.checked; renderInvoicePreview(); });
 document.getElementById("inv_setStatus").addEventListener("change", (e)=>{ inv.setStatus = e.target.checked; });
 document.getElementById("inv_addItem").addEventListener("click", ()=>{ inv.items.push({desc:"", amount:0}); renderInvItems(); renderInvoicePreview(); });
